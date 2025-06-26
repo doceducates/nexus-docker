@@ -2,6 +2,7 @@ import os
 import json
 import subprocess
 import docker
+from docker.errors import NotFound, APIError
 from flask import Flask, render_template, request, jsonify, flash, redirect, url_for
 from datetime import datetime
 import psutil
@@ -151,6 +152,135 @@ class NexusDockerManager:
         except Exception as e:
             app.logger.error(f"Stop all failed: {str(e)}")
             return {'success': False, 'error': str(e)}
+    
+    def add_new_node(self, node_id: str, node_name: str = None) -> Dict[str, Any]:
+        """Add a new single-instance node dynamically"""
+        try:
+            if not node_name:
+                node_name = f"nexus-node-{node_id}"
+            
+            # Check if container already exists
+            try:
+                existing = self.docker_client.containers.get(node_name)
+                return {'success': False, 'error': f'Container {node_name} already exists'}
+            except NotFound:
+                pass
+            
+            # Create container with nexus image
+            container = self.docker_client.containers.run(
+                image='nexus-cli:latest',
+                name=node_name,
+                environment={
+                    'NODE_ID': node_id,
+                    'MAX_THREADS': '4',
+                    'NEXUS_ENVIRONMENT': 'production',
+                    'DEBUG': 'false'
+                },
+                volumes={
+                    f'nexus_{node_name}_data': {'bind': '/app/data', 'mode': 'rw'},
+                    f'nexus_{node_name}_logs': {'bind': '/app/logs', 'mode': 'rw'}
+                },
+                command=["./scripts/start-single.sh"],
+                restart_policy={"Name": "unless-stopped"},
+                detach=True,
+                labels={'nexus.type': 'single-instance', 'nexus.node-id': node_id}
+            )
+            
+            app.logger.info(f"Created new node container: {node_name} with ID: {node_id}")
+            return {'success': True, 'message': f'Node {node_name} created successfully', 'container_id': container.id}
+            
+        except Exception as e:
+            app.logger.error(f"Failed to add new node: {str(e)}")
+            return {'success': False, 'error': str(e)}
+    
+    def remove_node(self, container_name: str, remove_volumes: bool = False) -> Dict[str, Any]:
+        """Remove a node and optionally its volumes"""
+        try:
+            container = self.docker_client.containers.get(container_name)
+            
+            # Stop container if running
+            if container.status == 'running':
+                container.stop(timeout=30)
+            
+            # Remove container
+            container.remove(force=True)
+            
+            # Remove volumes if requested
+            if remove_volumes:
+                try:
+                    data_volume = self.docker_client.volumes.get(f'nexus_{container_name}_data')
+                    data_volume.remove()
+                    logs_volume = self.docker_client.volumes.get(f'nexus_{container_name}_logs')
+                    logs_volume.remove()
+                except Exception as e:
+                    app.logger.warning(f"Failed to remove volumes for {container_name}: {str(e)}")
+            
+            app.logger.info(f"Removed node container: {container_name}")
+            return {'success': True, 'message': f'Node {container_name} removed successfully'}
+            
+        except NotFound:
+            return {'success': False, 'error': f'Container {container_name} not found'}
+        except Exception as e:
+            app.logger.error(f"Failed to remove node: {str(e)}")
+            return {'success': False, 'error': str(e)}
+    
+    def get_available_node_slots(self) -> List[str]:
+        """Get list of available node slot names"""
+        containers = self.get_containers()
+        existing_names = [c['name'] for c in containers if c['name'].startswith('nexus-node-')]
+        
+        # Generate next available slots
+        available_slots = []
+        for i in range(1, 21):  # Support up to 20 nodes
+            slot_name = f"nexus-node-{i:02d}"
+            if slot_name not in existing_names:
+                available_slots.append(slot_name)
+        
+        return available_slots[:5]  # Return first 5 available slots
+    
+    def scale_nodes(self, target_count: int, node_ids: List[str]) -> Dict[str, Any]:
+        """Scale the number of single-instance nodes"""
+        try:
+            current_containers = [c for c in self.get_containers() 
+                                if c['labels'].get('nexus.type') == 'single-instance']
+            current_count = len(current_containers)
+            
+            if target_count == current_count:
+                return {'success': True, 'message': f'Already at target count of {target_count} nodes'}
+            
+            results = []
+            
+            if target_count > current_count:
+                # Scale up - add new nodes
+                nodes_to_add = target_count - current_count
+                if len(node_ids) < nodes_to_add:
+                    return {'success': False, 'error': f'Need {nodes_to_add} node IDs but only {len(node_ids)} provided'}
+                
+                available_slots = self.get_available_node_slots()
+                for i in range(nodes_to_add):
+                    if i < len(available_slots) and i < len(node_ids):
+                        result = self.add_new_node(node_ids[i], available_slots[i])
+                        results.append(result)
+            
+            elif target_count < current_count:
+                # Scale down - remove nodes
+                nodes_to_remove = current_count - target_count
+                containers_to_remove = current_containers[:nodes_to_remove]
+                
+                for container in containers_to_remove:
+                    result = self.remove_node(container['name'])
+                    results.append(result)
+            
+            success_count = sum(1 for r in results if r['success'])
+            return {
+                'success': success_count == len(results),
+                'message': f'Scaling completed: {success_count}/{len(results)} operations successful',
+                'results': results
+            }
+            
+        except Exception as e:
+            app.logger.error(f"Scaling failed: {str(e)}")
+            return {'success': False, 'error': str(e)}
 
 # Initialize manager
 nexus_manager = NexusDockerManager()
@@ -203,6 +333,45 @@ def api_stop_all():
     result = nexus_manager.stop_all_services()
     return jsonify(result)
 
+@app.route('/api/nodes/add', methods=['POST'])
+def api_add_node():
+    """Add a new node"""
+    data = request.get_json()
+    node_id = data.get('node_id')
+    node_name = data.get('node_name')
+    
+    if not node_id:
+        return jsonify({'success': False, 'error': 'Node ID is required'}), 400
+    
+    result = nexus_manager.add_new_node(node_id, node_name)
+    return jsonify(result)
+
+@app.route('/api/nodes/<container_name>/remove', methods=['DELETE'])
+def api_remove_node(container_name):
+    """Remove a node"""
+    remove_volumes = request.args.get('remove_volumes', 'false').lower() == 'true'
+    result = nexus_manager.remove_node(container_name, remove_volumes)
+    return jsonify(result)
+
+@app.route('/api/nodes/scale', methods=['POST'])
+def api_scale_nodes():
+    """Scale nodes to target count"""
+    data = request.get_json()
+    target_count = data.get('target_count')
+    node_ids = data.get('node_ids', [])
+    
+    if target_count is None:
+        return jsonify({'success': False, 'error': 'Target count is required'}), 400
+    
+    result = nexus_manager.scale_nodes(target_count, node_ids)
+    return jsonify(result)
+
+@app.route('/api/nodes/available-slots')
+def api_available_slots():
+    """Get available node slots"""
+    slots = nexus_manager.get_available_node_slots()
+    return jsonify({'slots': slots})
+
 @app.route('/health')
 def health():
     """Health check endpoint"""
@@ -224,6 +393,21 @@ def logs_page():
 def deploy_page():
     """Deployment page"""
     return render_template('deploy.html')
+
+@app.route('/nodes')
+def nodes_page():
+    """Node management page"""
+    try:
+        containers = nexus_manager.get_containers()
+        available_slots = nexus_manager.get_available_node_slots()
+        return render_template('nodes.html', 
+                             containers=containers, 
+                             available_slots=available_slots,
+                             page_title='Node Management')
+    except Exception as e:
+        app.logger.error(f"Nodes page error: {str(e)}")
+        flash(f'Error loading nodes page: {str(e)}', 'error')
+        return redirect(url_for('index'))
 
 @app.errorhandler(404)
 def not_found(error):

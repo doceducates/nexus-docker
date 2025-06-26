@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}Node Management - Nexus Docker Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Node Management</h1>
+    <p>Add, remove, and scale Nexus CLI nodes dynamically</p>
+</div>
+
+<!-- Quick Actions -->
+<div class="quick-actions">
+    <button class="btn btn-primary" onclick="showAddNodeModal()">
+        <i class="icon">+</i> Add New Node
+    </button>
+    <button class="btn btn-secondary" onclick="showScaleModal()">
+        <i class="icon">⚖️</i> Scale Nodes
+    </button>
+    <button class="btn btn-info" onclick="refreshNodes()">
+        <i class="icon">🔄</i> Refresh
+    </button>
+</div>
+
+<!-- Current Nodes -->
+<div class="section">
+    <h2>Current Nodes</h2>
+    <div id="nodes-container">
+        {% if containers %}
+            <div class="nodes-grid">
+                {% for container in containers %}
+                    {% if container.labels.get('nexus.type') == 'single-instance' %}
+                    <div class="node-card" data-container-name="{{ container.name }}">
+                        <div class="node-header">
+                            <h3>{{ container.name }}</h3>
+                            <div class="status-badge status-{{ container.status }}">
+                                {{ container.status }}
+                            </div>
+                        </div>
+                        <div class="node-details">
+                            <p><strong>Node ID:</strong> {{ container.labels.get('nexus.node-id', 'Unknown') }}</p>
+                            <p><strong>Image:</strong> {{ container.image }}</p>
+                            <p><strong>Created:</strong> {{ container.created }}</p>
+                            <p><strong>Uptime:</strong> <span id="uptime-{{ container.name }}">{{ container.uptime }}</span></p>
+                        </div>
+                        <div class="node-actions">
+                            {% if container.status == 'running' %}
+                                <button class="btn btn-warning btn-sm" onclick="containerAction('{{ container.name }}', 'stop')">
+                                    Stop
+                                </button>
+                            {% else %}
+                                <button class="btn btn-success btn-sm" onclick="containerAction('{{ container.name }}', 'start')">
+                                    Start
+                                </button>
+                            {% endif %}
+                            <button class="btn btn-info btn-sm" onclick="showLogs('{{ container.name }}')">
+                                Logs
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="confirmRemoveNode('{{ container.name }}')">
+                                Remove
+                            </button>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <p>No nodes found. Add your first node to get started!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Available Slots -->
+<div class="section">
+    <h2>Available Slots</h2>
+    <div class="available-slots">
+        {% for slot in available_slots %}
+            <span class="slot-badge">{{ slot }}</span>
+        {% endfor %}
+        {% if not available_slots %}
+            <p>No available slots. Remove existing nodes to free up slots.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Node Modal -->
+<div id="addNodeModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Add New Node</h2>
+            <span class="close" onclick="closeModal('addNodeModal')">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="addNodeForm">
+                <div class="form-group">
+                    <label for="nodeId">Node ID:</label>
+                    <input type="text" id="nodeId" name="nodeId" required 
+                           placeholder="Enter your Nexus node ID">
+                </div>
+                <div class="form-group">
+                    <label for="nodeName">Node Name (optional):</label>
+                    <select id="nodeName" name="nodeName">
+                        <option value="">Auto-generate</option>
+                        {% for slot in available_slots %}
+                            <option value="{{ slot }}">{{ slot }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Add Node</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('addNodeModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Scale Nodes Modal -->
+<div id="scaleModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Scale Nodes</h2>
+            <span class="close" onclick="closeModal('scaleModal')">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form id="scaleForm">
+                <div class="form-group">
+                    <label for="targetCount">Target Node Count:</label>
+                    <input type="number" id="targetCount" name="targetCount" min="0" max="20" 
+                           value="{{ containers | selectattr('labels.nexus.type', 'equalto', 'single-instance') | list | length }}">
+                </div>
+                <div class="form-group">
+                    <label for="nodeIds">Node IDs (for scaling up):</label>
+                    <textarea id="nodeIds" name="nodeIds" rows="4" 
+                              placeholder="Enter node IDs, one per line or comma-separated"></textarea>
+                    <small>Only needed when scaling up. Provide one ID per new node.</small>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Scale Nodes</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('scaleModal')">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Logs Modal -->
+<div id="logsModal" class="modal">
+    <div class="modal-content logs-modal">
+        <div class="modal-header">
+            <h2>Container Logs: <span id="logsContainerName"></span></h2>
+            <span class="close" onclick="closeModal('logsModal')">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div class="logs-container">
+                <pre id="logsContent">Loading logs...</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Node management functionality
+function showAddNodeModal() {
+    document.getElementById('addNodeModal').style.display = 'block';
+}
+
+function showScaleModal() {
+    document.getElementById('scaleModal').style.display = 'block';
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+function refreshNodes() {
+    location.reload();
+}
+
+// Add node form handler
+document.getElementById('addNodeForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const nodeId = document.getElementById('nodeId').value;
+    const nodeName = document.getElementById('nodeName').value || null;
+    
+    try {
+        const response = await fetch('/api/nodes/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                node_id: nodeId,
+                node_name: nodeName
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification('Node added successfully!', 'success');
+            closeModal('addNodeModal');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('Failed to add node: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showNotification('Error adding node: ' + error.message, 'error');
+    }
+});
+
+// Scale form handler
+document.getElementById('scaleForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const targetCount = parseInt(document.getElementById('targetCount').value);
+    const nodeIdsText = document.getElementById('nodeIds').value;
+    const nodeIds = nodeIdsText.split(/[,\n]/).map(id => id.trim()).filter(id => id);
+    
+    try {
+        const response = await fetch('/api/nodes/scale', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                target_count: targetCount,
+                node_ids: nodeIds
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification('Scaling completed successfully!', 'success');
+            closeModal('scaleModal');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('Scaling failed: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showNotification('Error scaling nodes: ' + error.message, 'error');
+    }
+});
+
+// Container actions
+async function containerAction(containerName, action) {
+    try {
+        const response = await fetch(`/api/containers/${containerName}/${action}`, {
+            method: 'POST'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(`Container ${action} successful!`, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification(`Failed to ${action} container: ` + result.error, 'error');
+        }
+    } catch (error) {
+        showNotification(`Error: ` + error.message, 'error');
+    }
+}
+
+// Remove node confirmation
+function confirmRemoveNode(containerName) {
+    if (confirm(`Are you sure you want to remove node "${containerName}"?\n\nThis will stop and delete the container. Data volumes will be preserved unless you choose to remove them.`)) {
+        const removeVolumes = confirm('Also remove data volumes? (This will permanently delete all node data)');
+        removeNode(containerName, removeVolumes);
+    }
+}
+
+async function removeNode(containerName, removeVolumes = false) {
+    try {
+        const response = await fetch(`/api/nodes/${containerName}/remove?remove_volumes=${removeVolumes}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification('Node removed successfully!', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification('Failed to remove node: ' + result.error, 'error');
+        }
+    } catch (error) {
+        showNotification('Error removing node: ' + error.message, 'error');
+    }
+}
+
+// Show logs
+async function showLogs(containerName) {
+    document.getElementById('logsContainerName').textContent = containerName;
+    document.getElementById('logsModal').style.display = 'block';
+    document.getElementById('logsContent').textContent = 'Loading logs...';
+    
+    try {
+        const response = await fetch(`/api/logs/${containerName}?tail=200`);
+        const result = await response.json();
+        
+        if (result.success) {
+            document.getElementById('logsContent').textContent = result.logs || 'No logs available';
+        } else {
+            document.getElementById('logsContent').textContent = 'Error loading logs: ' + result.error;
+        }
+    } catch (error) {
+        document.getElementById('logsContent').textContent = 'Error loading logs: ' + error.message;
+    }
+}
+
+// Notification system
+function showNotification(message, type = 'info') {
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    }, 5000);
+}
+
+// Close modals when clicking outside
+window.addEventListener('click', function(event) {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %}
