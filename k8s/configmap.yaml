@@ -1,0 +1,66 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-config
+  namespace: nexus
+  labels:
+    app: nexus-cli
+data:
+  # Single node configurations
+  node_id_1: "123456"
+  node_id_2: "789012"
+  node_id_3: "345678"
+  
+  # Multi-instance configuration
+  node_ids: "123456,789012,345678,901234,567890"
+  max_threads_multi: "20"
+  
+  # General settings
+  nexus_environment: "production"
+  max_threads_single: "4"
+  log_level: "info"
+  
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nexus-secrets
+  namespace: nexus
+  labels:
+    app: nexus-cli
+type: Opaque
+data:
+  # Add any sensitive configuration here
+  # Example: api_key: <base64-encoded-api-key>
+  
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nexus-data-pvc
+  namespace: nexus
+  labels:
+    app: nexus-cli
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: fast-ssd # Adjust based on your storage class
+  
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nexus-logs-pvc
+  namespace: nexus
+  labels:
+    app: nexus-cli
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard # Logs can use standard storage

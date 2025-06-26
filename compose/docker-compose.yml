@@ -1,0 +1,222 @@
+version: '3.8'
+
+services:
+  # Single instance nodes
+  node-1:
+    build:
+      context: ../docker
+      dockerfile: Dockerfile
+    container_name: nexus-node-1
+    environment:
+      - NODE_ID=${NODE_ID_1:-123456}
+      - MAX_THREADS=${MAX_THREADS_1:-4}
+      - NEXUS_ENVIRONMENT=${NEXUS_ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - nexus_node_1_data:/app/data
+      - nexus_node_1_logs:/app/logs
+    restart: ${RESTART_POLICY:-unless-stopped}
+    command: ["./scripts/start-single.sh"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "nexus-cli"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPU_LIMIT_1:-2.0}'
+          memory: ${MEMORY_LIMIT_1:-2G}
+        reservations:
+          cpus: '${CPU_RESERVE_1:-0.5}'
+          memory: ${MEMORY_RESERVE_1:-512M}
+
+  node-2:
+    build:
+      context: ../docker
+      dockerfile: Dockerfile
+    container_name: nexus-node-2
+    environment:
+      - NODE_ID=${NODE_ID_2:-789012}
+      - MAX_THREADS=${MAX_THREADS_2:-4}
+      - NEXUS_ENVIRONMENT=${NEXUS_ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - nexus_node_2_data:/app/data
+      - nexus_node_2_logs:/app/logs
+    restart: ${RESTART_POLICY:-unless-stopped}
+    command: ["./scripts/start-single.sh"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "nexus-cli"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPU_LIMIT_2:-2.0}'
+          memory: ${MEMORY_LIMIT_2:-2G}
+        reservations:
+          cpus: '${CPU_RESERVE_2:-0.5}'
+          memory: ${MEMORY_RESERVE_2:-512M}
+    profiles:
+      - multi-single
+
+  node-3:
+    build:
+      context: ../docker
+      dockerfile: Dockerfile
+    container_name: nexus-node-3
+    environment:
+      - NODE_ID=${NODE_ID_3:-345678}
+      - MAX_THREADS=${MAX_THREADS_3:-4}
+      - NEXUS_ENVIRONMENT=${NEXUS_ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - nexus_node_3_data:/app/data
+      - nexus_node_3_logs:/app/logs
+    restart: ${RESTART_POLICY:-unless-stopped}
+    command: ["./scripts/start-single.sh"]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "nexus-cli"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPU_LIMIT_3:-2.0}'
+          memory: ${MEMORY_LIMIT_3:-2G}
+        reservations:
+          cpus: '${CPU_RESERVE_3:-0.5}'
+          memory: ${MEMORY_RESERVE_3:-512M}
+    profiles:
+      - multi-single
+
+  # Multi-instance container
+  multi-node:
+    build:
+      context: ../docker
+      dockerfile: Dockerfile
+    container_name: nexus-multi-node
+    environment:
+      # Comma-separated list of node IDs
+      - NODE_IDS=${NODE_IDS:-123456,789012,345678}
+      - MAX_THREADS=${MAX_THREADS_MULTI:-12}
+      - NEXUS_ENVIRONMENT=${NEXUS_ENVIRONMENT:-production}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - nexus_multi_data:/app/data
+      - nexus_multi_logs:/app/logs
+    restart: ${RESTART_POLICY:-unless-stopped}
+    command: ["./scripts/start-multi.sh"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "pgrep -f nexus-cli | wc -l | grep -q '[1-9]'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          cpus: '${CPU_LIMIT_MULTI:-8.0}'
+          memory: ${MEMORY_LIMIT_MULTI:-8G}
+        reservations:
+          cpus: '${CPU_RESERVE_MULTI:-2.0}'
+          memory: ${MEMORY_RESERVE_MULTI:-2G}
+    profiles:
+      - multi
+
+  # Web Management UI
+  web-manager:
+    build:
+      context: ../web-manager
+      dockerfile: Dockerfile
+    container_name: nexus-web-manager
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-nexus-docker-secret-key}
+      - COMPOSE_PROJECT_NAME=nexus-docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - .:/app/compose:ro
+    ports:
+      - "${WEB_MANAGER_PORT:-3000}:5000"
+    restart: ${RESTART_POLICY:-unless-stopped}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - default
+    profiles:
+      - management
+
+  # Management UI
+  management-ui:
+    build:
+      context: ../management-ui
+      dockerfile: Dockerfile
+    container_name: nexus-management-ui
+    environment:
+      - NODE_ENV=production
+      - DOCKER_SOCKET=/var/run/docker.sock
+      - COMPOSE_PROJECT_NAME=nexus-docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../compose:/app/compose:ro
+    ports:
+      - "${MANAGEMENT_UI_PORT:-3000}:3000"
+    restart: ${RESTART_POLICY:-unless-stopped}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - node-1
+    profiles:
+      - management
+
+  # Monitoring and logging (optional)
+  watchtower:
+    image: containrrr/watchtower
+    container_name: nexus-watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_INCLUDE_STOPPED=true
+      - WATCHTOWER_SCHEDULE=0 0 4 * * *  # Check for updates daily at 4 AM
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  nexus_node_1_data:
+    driver: local
+  nexus_node_1_logs:
+    driver: local
+  nexus_node_2_data:
+    driver: local
+  nexus_node_2_logs:
+    driver: local
+  nexus_node_3_data:
+    driver: local
+  nexus_node_3_logs:
+    driver: local
+  nexus_multi_data:
+    driver: local
+  nexus_multi_logs:
+    driver: local
+
+networks:
+  default:
+    name: nexus-network
+    driver: bridge

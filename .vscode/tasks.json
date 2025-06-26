@@ -1,0 +1,128 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build Docker Image",
+			"type": "shell",
+			"command": "${workspaceFolder}/scripts/manage.sh",
+			"args": ["build"],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"detail": "Build the Nexus CLI Docker image"
+		},
+		{
+			"label": "Start Single Instance",
+			"type": "shell",
+			"command": "${workspaceFolder}/scripts/manage.sh",
+			"args": ["start-single"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"detail": "Start a single Nexus CLI instance"
+		},
+		{
+			"label": "Start Multi Instance",
+			"type": "shell",
+			"command": "${workspaceFolder}/scripts/manage.sh",
+			"args": ["start-multi"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"detail": "Start multiple Nexus CLI instances in one container"
+		},
+		{
+			"label": "Show Status",
+			"type": "shell",
+			"command": "${workspaceFolder}/scripts/manage.sh",
+			"args": ["status"],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"detail": "Show status of all running containers"
+		},
+		{
+			"label": "Show Logs",
+			"type": "shell",
+			"command": "${workspaceFolder}/scripts/manage.sh",
+			"args": ["logs"],
+			"group": "test",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"detail": "Show logs from all containers"
+		},
+		{
+			"label": "Stop All Containers",
+			"type": "shell",
+			"command": "${workspaceFolder}/scripts/manage.sh",
+			"args": ["stop"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"detail": "Stop all running Nexus CLI containers"
+		},
+		{
+			"label": "Development Environment",
+			"type": "shell",
+			"command": "${workspaceFolder}/scripts/manage.sh",
+			"args": ["start-dev"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"detail": "Start development environment with debugging enabled"
+		},
+		{
+			"label": "Deploy to Kubernetes",
+			"type": "shell",
+			"command": "${workspaceFolder}/k8s/k8s-manage.sh",
+			"args": ["deploy"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared"
+			},
+			"problemMatcher": [],
+			"detail": "Deploy Nexus CLI to Kubernetes cluster"
+		}
+	]
+}

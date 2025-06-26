@@ -1,0 +1,148 @@
+# Production overrides for Docker Compose
+version: '3.8'
+
+services:
+  node-1:
+    environment:
+      - NEXUS_ENVIRONMENT=production
+      - DEBUG=false
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  node-2:
+    environment:
+      - NEXUS_ENVIRONMENT=production
+      - DEBUG=false
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  node-3:
+    environment:
+      - NEXUS_ENVIRONMENT=production
+      - DEBUG=false
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  multi-node:
+    environment:
+      - NEXUS_ENVIRONMENT=production
+      - DEBUG=false
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: '16.0'
+          memory: 16G
+        reservations:
+          cpus: '4.0'
+          memory: 4G
+
+  # Production monitoring
+  nexus-exporter:
+    image: prom/node-exporter:latest
+    container_name: nexus-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    profiles:
+      - monitoring
+
+volumes:
+  nexus_node_1_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nexus/data/node-1
+  nexus_node_1_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nexus/logs/node-1
+  nexus_node_2_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nexus/data/node-2
+  nexus_node_2_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nexus/logs/node-2
+  nexus_node_3_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nexus/data/node-3
+  nexus_node_3_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nexus/logs/node-3
+  nexus_multi_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nexus/data/multi
+  nexus_multi_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/nexus/logs/multi

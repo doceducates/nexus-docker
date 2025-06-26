@@ -1,0 +1,16 @@
+{
+   "node_id": "PLACEHOLDER_NODE_ID",
+   "created_at": "PLACEHOLDER_TIMESTAMP",
+   "version": "docker-deployment",
+   "environment": "PLACEHOLDER_ENVIRONMENT",
+   "configuration": {
+      "max_threads": "PLACEHOLDER_MAX_THREADS",
+      "log_level": "info",
+      "auto_restart": true,
+      "health_check_interval": 30
+   },
+   "docker": {
+      "container_name": "PLACEHOLDER_CONTAINER_NAME",
+      "instance_number": "PLACEHOLDER_INSTANCE_NUMBER"
+   }
+}

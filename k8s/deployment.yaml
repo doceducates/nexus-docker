@@ -1,0 +1,180 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-single-node
+  namespace: nexus
+  labels:
+    app: nexus-cli
+    type: single-instance
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nexus-cli
+      type: single-instance
+  template:
+    metadata:
+      labels:
+        app: nexus-cli
+        type: single-instance
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: nexus-cli
+        image: nexus-cli:latest
+        imagePullPolicy: Always
+        command: ["./scripts/start-single.sh"]
+        env:
+        - name: NODE_ID
+          valueFrom:
+            configMapKeyRef:
+              name: nexus-config
+              key: node_id_1
+        - name: MAX_THREADS
+          valueFrom:
+            configMapKeyRef:
+              name: nexus-config
+              key: max_threads_single
+        - name: NEXUS_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: nexus-config
+              key: nexus_environment
+        - name: DEBUG
+          value: "false"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: nexus-data
+          mountPath: /app/data
+        - name: nexus-logs
+          mountPath: /app/logs
+        livenessProbe:
+          exec:
+            command:
+            - pgrep
+            - -f
+            - nexus-cli
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - pgrep
+            - -f
+            - nexus-cli
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: nexus-data
+        persistentVolumeClaim:
+          claimName: nexus-data-pvc
+      - name: nexus-logs
+        persistentVolumeClaim:
+          claimName: nexus-logs-pvc
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-multi-node
+  namespace: nexus
+  labels:
+    app: nexus-cli
+    type: multi-instance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexus-cli
+      type: multi-instance
+  template:
+    metadata:
+      labels:
+        app: nexus-cli
+        type: multi-instance
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+      - name: nexus-cli-multi
+        image: nexus-cli:latest
+        imagePullPolicy: Always
+        command: ["./scripts/start-multi.sh"]
+        env:
+        - name: NODE_IDS
+          valueFrom:
+            configMapKeyRef:
+              name: nexus-config
+              key: node_ids
+        - name: MAX_THREADS
+          valueFrom:
+            configMapKeyRef:
+              name: nexus-config
+              key: max_threads_multi
+        - name: NEXUS_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: nexus-config
+              key: nexus_environment
+        - name: DEBUG
+          value: "false"
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2000m"
+          limits:
+            memory: "16Gi"
+            cpu: "8000m"
+        volumeMounts:
+        - name: nexus-data
+          mountPath: /app/data
+        - name: nexus-logs
+          mountPath: /app/logs
+        livenessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - "pgrep -f nexus-cli | wc -l | grep -q '[1-9]'"
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - bash
+            - -c
+            - "pgrep -f nexus-cli | wc -l | grep -q '[1-9]'"
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+      volumes:
+      - name: nexus-data
+        persistentVolumeClaim:
+          claimName: nexus-data-pvc
+      - name: nexus-logs
+        persistentVolumeClaim:
+          claimName: nexus-logs-pvc
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 60

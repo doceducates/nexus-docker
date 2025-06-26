@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nexus
+  labels:
+    name: nexus
+    app: nexus-cli
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus-single-service
+  namespace: nexus
+  labels:
+    app: nexus-cli
+    type: single-instance
+spec:
+  selector:
+    app: nexus-cli
+    type: single-instance
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus-multi-service
+  namespace: nexus
+  labels:
+    app: nexus-cli
+    type: multi-instance
+spec:
+  selector:
+    app: nexus-cli
+    type: multi-instance
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+
+---
+# Optional: ServiceMonitor for Prometheus scraping
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: nexus-metrics
+  namespace: nexus
+  labels:
+    app: nexus-cli
+spec:
+  selector:
+    matchLabels:
+      app: nexus-cli
+  endpoints:
+  - port: metrics
+    interval: 30s
+    path: /metrics
