@@ -153,6 +153,40 @@ start_prod() {
     show_status
 }
 
+# Web manager functions
+start_manager() {
+    check_env_file || exit 1
+    check_docker || exit 1
+    
+    log_info "Starting web management UI..."
+    run_compose --profile manager up -d web-manager
+    log_info "Web management UI started!"
+    log_info "Access the web interface at: http://localhost:${WEB_MANAGER_PORT:-3000}"
+    show_status
+}
+
+start_single_with_manager() {
+    check_env_file || exit 1
+    check_docker || exit 1
+    
+    log_info "Starting single instance with web management UI..."
+    run_compose --profile manager up -d node-1 web-manager
+    log_info "Single instance and web management UI started!"
+    log_info "Access the web interface at: http://localhost:${WEB_MANAGER_PORT:-3000}"
+    show_status
+}
+
+start_multi_with_manager() {
+    check_env_file || exit 1
+    check_docker || exit 1
+    
+    log_info "Starting multi-instance with web management UI..."
+    run_compose --profile multi --profile manager up -d
+    log_info "Multi-instance and web management UI started!"
+    log_info "Access the web interface at: http://localhost:${WEB_MANAGER_PORT:-3000}"
+    show_status
+}
+
 # Stop functions
 stop() {
     check_docker || exit 1
@@ -532,6 +566,15 @@ case "${1:-help}" in
         ;;
     start-prod)
         start_prod
+        ;;
+    start-manager)
+        start_manager
+        ;;
+    start-single-with-manager)
+        start_single_with_manager
+        ;;
+    start-multi-with-manager)
+        start_multi_with_manager
         ;;
     stop)
         if [ -n "$2" ]; then

@@ -2,13 +2,13 @@
 
 # Nexus Docker Project Instructions
 
-This project provides Docker deployment solutions for the Nexus CLI with support for multiple node instances.
+This project provides Docker deployment solutions for the Nexus CLI with support for multiple node instances and web-based management.
 
 ## Project Context
 
-- **Technology Stack**: Docker, Docker Compose, Shell scripting, Kubernetes
-- **Purpose**: Containerized deployment of Nexus CLI with multi-instance support
-- **Target Environment**: Production and development Docker environments
+- **Technology Stack**: Docker, Docker Compose, Shell scripting, Kubernetes, Python Flask, HTML/CSS/JavaScript
+- **Purpose**: Containerized deployment of Nexus CLI with multi-instance support and web management interface
+- **Target Environment**: Production and development Docker environments with web-based monitoring and control
 
 ## Code Style Guidelines
 
@@ -25,6 +25,20 @@ This project provides Docker deployment solutions for the Nexus CLI with support
 - Include health checks where appropriate
 - Follow security best practices (non-root user, minimal base images)
 
+### Python/Flask (Web Manager)
+- Follow PEP 8 style guidelines
+- Use type hints where appropriate
+- Include proper error handling and logging
+- Use Flask best practices for API design
+- Implement proper security for Docker API access
+
+### JavaScript/HTML/CSS
+- Use modern ES6+ features
+- Follow semantic HTML structure
+- Use CSS Grid/Flexbox for layouts
+- Implement responsive design principles
+- Use vanilla JavaScript or minimal dependencies
+
 ### Configuration Files
 - Use environment variables for configuration
 - Provide sensible defaults
@@ -38,6 +52,7 @@ This project provides Docker deployment solutions for the Nexus CLI with support
 3. **Observability**: Include proper logging and monitoring
 4. **Security**: Use security best practices for container deployment
 5. **Simplicity**: Provide simple management interfaces
+6. **Web Management**: Centralized web-based container management with Docker-in-Docker support
 
 ## File Organization
 
@@ -45,6 +60,7 @@ This project provides Docker deployment solutions for the Nexus CLI with support
 - `compose/`: Docker Compose files for different environments
 - `k8s/`: Kubernetes deployment manifests
 - `scripts/`: Management and utility scripts
+- `web-manager/`: Flask-based web management interface
 - `docs/`: Comprehensive documentation
 
 ## Development Guidelines
@@ -54,3 +70,31 @@ This project provides Docker deployment solutions for the Nexus CLI with support
 - Include proper error handling and user feedback
 - Document all configuration options and environment variables
 - Provide clear examples and usage instructions
+- Test web manager functionality with Docker-in-Docker scenarios
+- Ensure web interface is responsive and user-friendly
+
+## Web Manager Specifics
+
+### Flask Application Structure
+- `web-manager/app/main.py`: Main Flask application with Docker API integration
+- `web-manager/templates/`: Jinja2 templates for web interface
+- `web-manager/requirements.txt`: Python dependencies
+- `web-manager/Dockerfile`: Container build for web manager
+
+### Docker-in-Docker Integration
+- Web manager runs with Docker socket mounted for container management
+- Use Docker Python SDK for programmatic container control
+- Implement proper error handling for Docker API calls
+- Secure access to Docker daemon within container
+
+### API Design
+- RESTful endpoints for container operations (start, stop, logs, status)
+- JSON responses for AJAX calls
+- Real-time updates using polling or WebSockets
+- Proper HTTP status codes and error messages
+
+### Security Considerations
+- Validate all user inputs for container operations
+- Implement session management for web interface
+- Secure Docker socket access patterns
+- Rate limiting for API endpoints
