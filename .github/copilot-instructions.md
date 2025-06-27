@@ -98,3 +98,6 @@ This project provides Docker deployment solutions for the Nexus CLI with support
 - Implement session management for web interface
 - Secure Docker socket access patterns
 - Rate limiting for API endpoints
+
+## Testing
+You are in VSCode Windows, so run commands in powershell syntax. 

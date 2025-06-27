@@ -21,6 +21,132 @@ class NexusDockerManager:
     def __init__(self):
         self.compose_project = os.environ.get('COMPOSE_PROJECT_NAME', 'nexus-docker')
         self.compose_dir = '/app/compose'
+        self.nexus_image = 'nexus-cli:latest'
+        self.network_name = 'nexus-network'
+        
+    def ensure_network(self):
+        """Ensure the Nexus network exists"""
+        try:
+            docker_client.networks.get(self.network_name)
+        except NotFound:
+            docker_client.networks.create(
+                self.network_name,
+                driver="bridge",
+                options={"com.docker.network.bridge.enable_icc": "true"}
+            )
+    
+    def create_single_node_container(self, node_id: str, threads: int = 4, memory_limit: str = "2g", cpu_limit: float = 2.0) -> Dict[str, Any]:
+        """Create a single node container"""
+        try:
+            self.ensure_network()
+            
+            container_name = f"nexus-node-{node_id}"
+            
+            # Check if container already exists
+            try:
+                existing = docker_client.containers.get(container_name)
+                if existing.status == 'running':
+                    return {"success": False, "error": f"Container {container_name} already running"}
+                else:
+                    existing.remove(force=True)
+            except NotFound:
+                pass
+            
+            # Create volumes
+            data_volume = f"nexus_node_{node_id}_data"
+            logs_volume = f"nexus_node_{node_id}_logs"
+            
+            # Create container
+            container = docker_client.containers.run(
+                image=self.nexus_image,
+                name=container_name,
+                environment={
+                    'NODE_ID': node_id,
+                    'MAX_THREADS': str(threads),
+                    'NEXUS_ENVIRONMENT': 'production',
+                    'CONTAINER_TYPE': 'single'
+                },
+                volumes={
+                    data_volume: {'bind': '/app/data', 'mode': 'rw'},
+                    logs_volume: {'bind': '/app/logs', 'mode': 'rw'}
+                },
+                networks=[self.network_name],
+                mem_limit=memory_limit,
+                cpu_count=cpu_limit,
+                restart_policy={"Name": "unless-stopped"},
+                detach=True,
+                command="./scripts/start-single.sh"
+            )
+            
+            return {
+                "success": True,
+                "container_id": container.short_id,
+                "container_name": container_name,
+                "node_id": node_id
+            }
+            
+        except Exception as e:
+            app.logger.error(f"Failed to create single node container: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    def create_multi_node_container(self, node_ids: List[str], total_threads: int = 16, memory_limit: str = "4g", cpu_limit: float = 4.0) -> Dict[str, Any]:
+        """Create a multi-node container"""
+        try:
+            self.ensure_network()
+            
+            container_name = f"nexus-multi-{'-'.join(node_ids[:2])}"  # Use first 2 node IDs for naming
+            
+            # Check if container already exists
+            try:
+                existing = docker_client.containers.get(container_name)
+                if existing.status == 'running':
+                    return {"success": False, "error": f"Container {container_name} already running"}
+                else:
+                    existing.remove(force=True)
+            except NotFound:
+                pass
+            
+            # Create shared volumes
+            data_volume = f"nexus_multi_{container_name}_data"
+            logs_volume = f"nexus_multi_{container_name}_logs"
+            
+            # Calculate threads per node
+            threads_per_node = max(1, total_threads // len(node_ids))
+            
+            # Create container
+            container = docker_client.containers.run(
+                image=self.nexus_image,
+                name=container_name,
+                environment={
+                    'NODE_IDS': ','.join(node_ids),
+                    'MAX_THREADS': str(total_threads),
+                    'THREADS_PER_NODE': str(threads_per_node),
+                    'NEXUS_ENVIRONMENT': 'production',
+                    'CONTAINER_TYPE': 'multi'
+                },
+                volumes={
+                    data_volume: {'bind': '/app/data', 'mode': 'rw'},
+                    logs_volume: {'bind': '/app/logs', 'mode': 'rw'}
+                },
+                networks=[self.network_name],
+                mem_limit=memory_limit,
+                cpu_count=cpu_limit,
+                restart_policy={"Name": "unless-stopped"},
+                detach=True,
+                command="./scripts/start-multi.sh"
+            )
+            
+            return {
+                "success": True,
+                "container_id": container.short_id,
+                "container_name": container_name,
+                "node_ids": node_ids,
+                "total_threads": total_threads
+            }
+            
+        except Exception as e:
+            app.logger.error(f"Failed to create multi-node container: {str(e)}")
+            return {"success": False, "error": str(e)}
         
     def get_containers(self) -> List[Dict[str, Any]]:
         """Get all Nexus-related containers"""
@@ -416,6 +542,107 @@ def not_found(error):
 @app.errorhandler(500)
 def internal_error(error):
     return render_template('error.html', error='Internal server error'), 500
+
+# New API endpoints for dynamic container creation
+@app.route('/api/containers/create-single', methods=['POST'])
+def api_create_single_container():
+    """Create a single node container"""
+    data = request.get_json()
+    
+    # Validate required fields
+    node_id = data.get('node_id')
+    if not node_id:
+        return jsonify({'success': False, 'error': 'Node ID is required'}), 400
+    
+    # Optional parameters with defaults
+    threads = data.get('threads', 4)
+    memory_limit = data.get('memory_limit', '2g')
+    cpu_limit = data.get('cpu_limit', 2.0)
+    
+    try:
+        result = nexus_manager.create_single_node_container(
+            node_id=str(node_id),
+            threads=int(threads),
+            memory_limit=memory_limit,
+            cpu_limit=float(cpu_limit)
+        )
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': f'Invalid parameter: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/containers/create-multi', methods=['POST'])
+def api_create_multi_container():
+    """Create a multi-node container"""
+    data = request.get_json()
+    
+    # Validate required fields
+    node_ids = data.get('node_ids')
+    if not node_ids or not isinstance(node_ids, list) or len(node_ids) < 2:
+        return jsonify({'success': False, 'error': 'At least 2 node IDs are required for multi-node container'}), 400
+    
+    # Optional parameters with defaults
+    total_threads = data.get('total_threads', 16)
+    memory_limit = data.get('memory_limit', '4g')
+    cpu_limit = data.get('cpu_limit', 4.0)
+    
+    try:
+        result = nexus_manager.create_multi_node_container(
+            node_ids=[str(nid) for nid in node_ids],
+            total_threads=int(total_threads),
+            memory_limit=memory_limit,
+            cpu_limit=float(cpu_limit)
+        )
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({'success': False, 'error': f'Invalid parameter: {str(e)}'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/containers/list')
+def api_list_containers():
+    """Get detailed container information"""
+    containers = nexus_manager.get_containers()
+    return jsonify({
+        'success': True,
+        'containers': containers,
+        'total': len(containers),
+        'running': len([c for c in containers if c['status'] == 'running'])
+    })
+
+@app.route('/api/containers/<container_name>/info')
+def api_container_info(container_name):
+    """Get detailed information about a specific container"""
+    try:
+        container = docker_client.containers.get(container_name)
+        info = {
+            'id': container.short_id,
+            'name': container.name,
+            'status': container.status,
+            'image': container.image.tags[0] if container.image.tags else 'unknown',
+            'created': container.attrs['Created'],
+            'state': container.attrs['State'],
+            'config': container.attrs['Config'],
+            'network_settings': container.attrs['NetworkSettings'],
+            'mounts': container.attrs['Mounts'],
+            'logs': nexus_manager.get_logs(container_name, tail=50)
+        }
+        
+        # Add stats if container is running
+        if container.status == 'running':
+            info['stats'] = nexus_manager.get_container_stats(container.id)
+            
+        return jsonify({'success': True, 'container': info})
+    except NotFound:
+        return jsonify({'success': False, 'error': 'Container not found'}), 404
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/create')
+def create_page():
+    """Container creation page"""
+    return render_template('create.html')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

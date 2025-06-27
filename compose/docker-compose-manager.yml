@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Web Management Interface
+  web-manager:
+    build:
+      context: ../web-manager
+      dockerfile: Dockerfile
+    container_name: nexus-web-manager
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-nexus-docker-secret-key-change-me}
+      - COMPOSE_PROJECT_NAME=nexus-docker
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      # Mount Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Mount the compose directory for dynamic container creation
+      - ../docker:/app/docker:ro
+      - ../compose:/app/compose:ro
+    ports:
+      - "${WEB_MANAGER_PORT:-5000}:5000"
+    restart: ${RESTART_POLICY:-unless-stopped}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - nexus-network
+    labels:
+      - "nexus.component=web-manager"
+      - "nexus.description=Web management interface for Nexus Docker containers"
+
+  # Optional: Nexus CLI base image builder
+  # This service builds the base Nexus CLI image that will be used for dynamic containers
+  nexus-builder:
+    build:
+      context: ../docker
+      dockerfile: Dockerfile
+    image: nexus-cli:latest
+    container_name: nexus-builder
+    command: ["echo", "Nexus CLI image built successfully"]
+    profiles:
+      - build-only
+
+volumes:
+  # Shared volumes that can be used by dynamically created containers
+  nexus_shared_data:
+    driver: local
+  nexus_shared_logs:
+    driver: local
+
+networks:
+  nexus-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

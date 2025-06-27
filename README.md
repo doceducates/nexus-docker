@@ -1,53 +1,172 @@
-# Nexus CLI Docker Deployment
+# Nexus Docker Management System
 
-A comprehensive Docker deployment solution for running Nexus CLI with support for multiple node instances.
+A comprehensive web-based management system for creating and managing Nexus CLI Docker containers dynamically.
 
 ## Features
 
-- 🐳 **Multi-container support**: Run each node in its own container for maximum isolation
-- 🔄 **Multi-instance support**: Run multiple nodes within a single container for resource efficiency
-- 📊 **Easy management**: Simple scripts for deployment, monitoring, and scaling
-- ⚙️ **Flexible configuration**: Environment-based configuration with Docker Compose
-- 🚀 **Auto-scaling**: Support for horizontal and vertical scaling
-- 📈 **Monitoring**: Built-in logging and status monitoring
-- ☸️ **Kubernetes ready**: Includes Kubernetes deployment configurations
+� **Dynamic Container Creation**
+- Create single-node containers (one Nexus CLI instance per container)
+- Create multi-node containers (multiple Nexus CLI instances in one container)
+- Real-time resource allocation and monitoring
+
+�️ **Web Management Interface**
+- Intuitive web UI for container management
+- Real-time container status and metrics
+- Container logs viewing
+- Start/stop/restart/remove containers
+
+📊 **Monitoring & Metrics**
+- System resource monitoring (CPU, Memory, Disk)
+- Container health checks
+- Live container statistics
+
+� **Flexible Configuration**
+- Configurable resource limits (CPU, Memory)
+- Custom thread allocation
+- Environment-specific settings
 
 ## Quick Start
 
 ### Prerequisites
 
 - Docker and Docker Compose installed
-- Valid Nexus node IDs
+- PowerShell (Windows) or Bash (Linux/macOS)
+- At least 4GB RAM available
 
 ### 1. Clone and Setup
 
 ```bash
 git clone <repository-url>
 cd nexus-docker
-cp .env.example .env
-# Edit .env with your node IDs
 ```
 
-### 2. Build and Deploy
+### 2. Start the Management System
 
-```bash
-# Build the image
-./scripts/manage.sh build
-
-# Deploy single instance
-./scripts/manage.sh start-single
-
-# Or deploy multi-instance
-./scripts/manage.sh start-multi
+**Windows (PowerShell):**
+```powershell
+.\manage.ps1 start
 ```
 
-### 3. Monitor
+**Linux/macOS (Bash):**
+```bash
+chmod +x manage.sh
+./manage.sh start
+```
+
+### 3. Access the Web Interface
+
+Open your browser and navigate to: **http://localhost:5000**
+
+## Usage Guide
+
+### Creating Containers
+
+The web interface provides two main options:
+
+#### 1. Single Node Container
+- **Use case**: Testing, development, or isolated deployments
+- **Configuration**:
+  - Node ID: Unique identifier for your Nexus node
+  - CPU Threads: Number of threads (1-16)
+  - Memory Limit: Container memory limit (1GB-8GB)
+  - CPU Limit: CPU cores allocation (0.5-8)
+
+#### 2. Multi-Node Container
+- **Use case**: Production deployments with resource sharing
+- **Configuration**:
+  - Node IDs: Comma-separated list of node IDs
+  - Total Threads: Total threads shared among all nodes
+  - Memory Limit: Container memory limit (2GB-16GB)
+  - CPU Limit: CPU cores allocation (1-16)
+
+### Managing Containers
+
+From the web interface, you can:
+- **Start/Stop** containers
+- **Restart** containers for updates
+- **View logs** in real-time
+- **Remove** unused containers
+- **Monitor** resource usage
+
+## Commands Reference
+
+### Management Scripts
+
+| Command | Description |
+|---------|-------------|
+| `build` | Build the Nexus CLI base image |
+| `start` | Start the entire management system |
+| `stop` | Stop all services |
+| `status` | Show container status |
+| `restart` | Restart all services |
+| `logs` | Follow web manager logs |
+
+### Usage Examples
 
 ```bash
-# Check status
-./scripts/manage.sh status
+# Build and start everything
+./manage.sh start
+
+# View status
+./manage.sh status
+
+# Stop all services
+./manage.sh stop
 
 # View logs
+./manage.sh logs
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Port Already in Use**
+   - Change `WEB_MANAGER_PORT` in `compose/.env.manager`
+
+2. **Docker Permission Denied**
+   - Add user to docker group: `sudo usermod -aG docker $USER`
+
+3. **Container Creation Fails**
+   - Check if base image exists: `docker images nexus-cli`
+   - Verify Docker access: `docker info`
+
+4. **Web Interface Not Loading**
+   - Check logs: `docker logs nexus-web-manager`
+   - Restart: `./manage.sh restart`
+
+## Architecture
+
+```
+Web Interface (Browser) ◄──► Flask Backend ◄──► Docker Engine
+                                    │
+                                    ▼
+                            Docker Socket Access
+```
+
+The system uses:
+- **Flask web application** for the management interface
+- **Docker API** for container lifecycle management
+- **Custom Docker network** for container communication
+- **Persistent volumes** for data storage
+
+## Security
+
+- Use strong secret keys in production
+- Restrict web interface access
+- Monitor container resource usage
+- Regular security updates
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Test your changes
+4. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details
 ./scripts/manage.sh logs
 ```
 
