@@ -86,23 +86,33 @@ def run_server(debug=False, port=5000, host="127.0.0.1"):
         from app.main import app, socketio
         socketio.run(app, debug=True, host=host, port=port, allow_unsafe_werkzeug=True)
     else:
-        # Use Gunicorn for production
-        try:
-            import gunicorn
-            cmd = [
-                sys.executable, "-m", "gunicorn",
-                "--bind", f"{host}:{port}",
-                "--workers", "1",
-                "--worker-class", "eventlet",
-                "--timeout", "120",
-                "--worker-connections", "1000",
-                "app.main:app"
-            ]
-            subprocess.run(cmd, check=True)
-        except ImportError:
-            print("Gunicorn not available, falling back to Flask development server")
-            from app.main import app, socketio
-            socketio.run(app, debug=False, host=host, port=port)
+        # Check if we're on Windows or if Gunicorn is not available/compatible
+        is_windows = platform.system().lower() == 'windows'
+        
+        if not is_windows:
+            # Use Gunicorn for production on Unix systems
+            try:
+                import gunicorn
+                cmd = [
+                    sys.executable, "-m", "gunicorn",
+                    "--bind", f"{host}:{port}",
+                    "--workers", "1",
+                    "--worker-class", "eventlet",
+                    "--timeout", "120",
+                    "--worker-connections", "1000",
+                    "app.main:app"
+                ]
+                subprocess.run(cmd, check=True)
+                return
+            except (ImportError, subprocess.CalledProcessError) as e:
+                print(f"Gunicorn failed: {e}")
+                print("Falling back to Flask development server")
+        else:
+            print("Running on Windows - using Flask development server (Gunicorn not supported)")
+        
+        # Fallback to Flask development server
+        from app.main import app, socketio
+        socketio.run(app, debug=False, host=host, port=port)
 
 def main():
     """Main entry point"""
