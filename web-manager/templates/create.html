@@ -1,444 +1,450 @@
 {% extends "base.html" %}
 
+{% block title %}Create Instance - Nexus CLI Manager{% endblock %}
+{% block page_title %}Create New Instance{% endblock %}
+
 {% block content %}
-<div x-data="nexusManager()" x-init="init()">
-    <!-- Header -->
+<div x-data="createInstanceData()" x-init="init()">
+    <!-- Step Progress -->
     <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">Nexus Docker Manager</h1>
-        <p class="mt-2 text-gray-600">Create and manage Nexus CLI Docker containers dynamically</p>
+        <nav aria-label="Progress">
+            <ol class="flex items-center">
+                <li class="relative pr-8 sm:pr-20">
+                    <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                        <div class="h-0.5 w-full bg-gray-200"></div>
+                    </div>
+                    <a href="#" class="relative w-8 h-8 flex items-center justify-center bg-blue-600 rounded-full border-2 border-blue-600 hover:bg-blue-700">
+                        <span class="text-white text-sm font-medium">1</span>
+                    </a>
+                    <span class="absolute top-10 left-0 text-xs font-medium text-gray-500">Choose Mode</span>
+                </li>
+                <li class="relative pr-8 sm:pr-20">
+                    <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                        <div class="h-0.5 w-full" :class="step >= 2 ? 'bg-blue-600' : 'bg-gray-200'"></div>
+                    </div>
+                    <a href="#" class="relative w-8 h-8 flex items-center justify-center rounded-full border-2" 
+                       :class="step >= 2 ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'">
+                        <span class="text-sm font-medium" :class="step >= 2 ? 'text-white' : 'text-gray-500'">2</span>
+                    </a>
+                    <span class="absolute top-10 left-0 text-xs font-medium text-gray-500">Configure</span>
+                </li>
+                <li class="relative">
+                    <a href="#" class="relative w-8 h-8 flex items-center justify-center rounded-full border-2" 
+                       :class="step >= 3 ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-300'">
+                        <span class="text-sm font-medium" :class="step >= 3 ? 'text-white' : 'text-gray-500'">3</span>
+                    </a>
+                    <span class="absolute top-10 left-0 text-xs font-medium text-gray-500">Deploy</span>
+                </li>
+            </ol>
+        </nav>
     </div>
 
-    <!-- Action Cards -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        <!-- Create Single Node Container -->
-        <div class="bg-white shadow-lg rounded-lg p-6">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-blue-100 rounded-lg">
-                    <i class="fas fa-cube text-blue-600 text-xl"></i>
-                </div>
-                <h3 class="ml-3 text-lg font-semibold text-gray-900">Single Node Container</h3>
-            </div>
-            <p class="text-gray-600 mb-4">Create a container with one Nexus CLI node. Best for isolated testing or small deployments.</p>
-            
-            <form @submit.prevent="createSingleContainer()">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Node ID</label>
-                        <input type="text" x-model="singleNode.nodeId" 
-                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                               placeholder="e.g., 123456" required>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">CPU Threads</label>
-                            <input type="number" x-model="singleNode.threads" min="1" max="16"
-                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+    <!-- Step 1: Choose Deployment Mode -->
+    <div x-show="step === 1" x-cloak>
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Choose Deployment Mode</h2>
+            <p class="text-gray-600">Select how you want to run your Nexus CLI instance</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+            <template x-for="mode in availableModes" :key="mode.id">
+                <div class="relative">
+                    <input type="radio" :id="'mode-' + mode.id" :value="mode.id" x-model="selectedMode.id" class="sr-only">
+                    <label :for="'mode-' + mode.id" 
+                           class="relative block w-full bg-white border rounded-lg shadow-sm p-6 cursor-pointer hover:border-gray-400 focus:outline-none transition-colors"
+                           :class="selectedMode.id === mode.id ? 'border-blue-500 ring-2 ring-blue-500' : 'border-gray-300'">
+                        <div class="flex items-center mb-4">
+                            <div class="w-10 h-10 rounded-lg flex items-center justify-center mr-3"
+                                 :class="{
+                                     'bg-green-100': mode.color === 'green',
+                                     'bg-blue-100': mode.color === 'blue',
+                                     'bg-purple-100': mode.color === 'purple',
+                                     'bg-orange-100': mode.color === 'orange'
+                                 }">
+                                <i :class="mode.icon + ' text-lg'" 
+                                   :class="{
+                                       'text-green-600': mode.color === 'green',
+                                       'text-blue-600': mode.color === 'blue',
+                                       'text-purple-600': mode.color === 'purple',
+                                       'text-orange-600': mode.color === 'orange'
+                                   }"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-900" x-text="mode.name"></h3>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Memory Limit</label>
-                            <select x-model="singleNode.memoryLimit" 
-                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option value="1g">1 GB</option>
-                                <option value="2g">2 GB</option>
-                                <option value="4g">4 GB</option>
-                                <option value="8g">8 GB</option>
-                            </select>
+                        <p class="text-sm text-gray-600 mb-4" x-text="mode.description"></p>
+                        <ul class="space-y-1">
+                            <template x-for="feature in mode.features" :key="feature">
+                                <li class="text-sm text-gray-600 flex items-center">
+                                    <i class="fas fa-check text-green-500 mr-2 text-xs"></i>
+                                    <span x-text="feature"></span>
+                                </li>
+                            </template>
+                        </ul>
+                        
+                        <!-- Selection indicator -->
+                        <div x-show="selectedMode.id === mode.id" class="absolute top-4 right-4">
+                            <div class="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                                <i class="fas fa-check text-white text-xs"></i>
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">CPU Limit</label>
-                        <input type="number" x-model="singleNode.cpuLimit" min="0.5" max="8" step="0.5"
-                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    </div>
+                    </label>
                 </div>
-                <button type="submit" :disabled="creating" 
-                        class="mt-4 w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <span x-show="!creating">Create Single Container</span>
-                    <span x-show="creating">Creating...</span>
-                </button>
-            </form>
+            </template>
         </div>
 
-        <!-- Create Multi-Node Container -->
-        <div class="bg-white shadow-lg rounded-lg p-6">
-            <div class="flex items-center mb-4">
-                <div class="p-2 bg-green-100 rounded-lg">
-                    <i class="fas fa-cubes text-green-600 text-xl"></i>
-                </div>
-                <h3 class="ml-3 text-lg font-semibold text-gray-900">Multi-Node Container</h3>
-            </div>
-            <p class="text-gray-600 mb-4">Create a container with multiple Nexus CLI nodes. Efficient resource sharing for production use.</p>
-            
-            <form @submit.prevent="createMultiContainer()">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Node IDs (comma-separated)</label>
-                        <input type="text" x-model="multiNode.nodeIds" 
-                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                               placeholder="e.g., 123456,789012,345678" required>
-                        <p class="mt-1 text-xs text-gray-500">Enter at least 2 node IDs separated by commas</p>
-                    </div>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Total Threads</label>
-                            <input type="number" x-model="multiNode.totalThreads" min="2" max="32"
-                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Memory Limit</label>
-                            <select x-model="multiNode.memoryLimit" 
-                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                                <option value="2g">2 GB</option>
-                                <option value="4g">4 GB</option>
-                                <option value="8g">8 GB</option>
-                                <option value="16g">16 GB</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">CPU Limit</label>
-                        <input type="number" x-model="multiNode.cpuLimit" min="1" max="16" step="0.5"
-                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                </div>
-                <button type="submit" :disabled="creating" 
-                        class="mt-4 w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    <span x-show="!creating">Create Multi-Node Container</span>
-                    <span x-show="creating">Creating...</span>
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <!-- System Metrics -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-play-circle text-green-400 text-2xl"></i>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Running Containers</dt>
-                            <dd class="text-lg font-medium text-gray-900" x-text="metrics.runningContainers || 0"></dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-cubes text-blue-400 text-2xl"></i>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Total Containers</dt>
-                            <dd class="text-lg font-medium text-gray-900" x-text="metrics.totalContainers || 0"></dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-microchip text-purple-400 text-2xl"></i>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">CPU Usage</dt>
-                            <dd class="text-lg font-medium text-gray-900" x-text="(metrics.cpuPercent || 0).toFixed(1) + '%'"></dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-memory text-orange-400 text-2xl"></i>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Memory Usage</dt>
-                            <dd class="text-lg font-medium text-gray-900" x-text="(metrics.memoryPercent || 0).toFixed(1) + '%'"></dd>
-                        </dl>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Container List -->
-    <div class="bg-white shadow overflow-hidden sm:rounded-md">
-        <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <div>
-                <h3 class="text-lg leading-6 font-medium text-gray-900">Active Containers</h3>
-                <p class="mt-1 max-w-2xl text-sm text-gray-500">Manage your Nexus CLI containers</p>
-            </div>
-            <button @click="refreshContainers()" 
-                    class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
-                <i class="fas fa-sync-alt mr-2"></i>Refresh
+        <div class="flex justify-end">
+            <button @click="nextStep()" 
+                    :disabled="!selectedMode.id"
+                    class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                Next Step
             </button>
         </div>
-        <ul class="divide-y divide-gray-200" x-show="containers.length > 0">
-            <template x-for="container in containers" :key="container.id">
-                <li class="px-4 py-4 sm:px-6">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center">
-                            <div class="flex-shrink-0">
-                                <div class="w-3 h-3 rounded-full" 
-                                     :class="container.status === 'running' ? 'bg-green-400' : 'bg-red-400'"></div>
-                            </div>
-                            <div class="ml-4">
-                                <div class="flex items-center">
-                                    <div class="text-sm font-medium text-gray-900" x-text="container.name"></div>
-                                    <div class="ml-2 flex-shrink-0 flex">
-                                        <p class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                           :class="container.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
-                                           x-text="container.status"></p>
-                                    </div>
-                                </div>
-                                <div class="text-sm text-gray-500">
-                                    <span x-text="container.image"></span>
-                                    <span class="mx-2">•</span>
-                                    <span x-text="container.id"></span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex space-x-2">
-                            <button @click="containerAction(container.name, 'start')" 
-                                    x-show="container.status !== 'running'"
-                                    class="text-green-600 hover:text-green-900">
-                                <i class="fas fa-play"></i>
-                            </button>
-                            <button @click="containerAction(container.name, 'stop')" 
-                                    x-show="container.status === 'running'"
-                                    class="text-yellow-600 hover:text-yellow-900">
-                                <i class="fas fa-stop"></i>
-                            </button>
-                            <button @click="containerAction(container.name, 'restart')" 
-                                    x-show="container.status === 'running'"
-                                    class="text-blue-600 hover:text-blue-900">
-                                <i class="fas fa-redo"></i>
-                            </button>
-                            <button @click="viewLogs(container.name)" 
-                                    class="text-purple-600 hover:text-purple-900">
-                                <i class="fas fa-file-alt"></i>
-                            </button>
-                            <button @click="containerAction(container.name, 'remove')" 
-                                    x-show="container.status !== 'running'"
-                                    class="text-red-600 hover:text-red-900">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
+    </div>
+
+    <!-- Step 2: Configuration -->
+    <div x-show="step === 2" x-cloak>
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Configure Instance</h2>
+            <p class="text-gray-600">Set up your Nexus CLI instance parameters</p>
+        </div>
+
+        <div class="bg-white shadow rounded-lg border border-gray-200 p-6 mb-8">
+            <!-- Basic Configuration -->
+            <div class="mb-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Basic Settings</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Instance Name/ID</label>
+                        <input type="text" x-model="config.nodeId" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="e.g., nexus-node-01">
+                        <p class="text-xs text-gray-500 mt-1">Unique identifier for this instance</p>
                     </div>
-                </li>
-            </template>
-        </ul>
-        <div x-show="containers.length === 0" class="px-4 py-8 text-center text-gray-500">
-            <i class="fas fa-cube text-4xl mb-4"></i>
-            <p>No containers found. Create your first container above.</p>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Number of Threads</label>
+                        <select x-model="config.threads" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="1">1 Thread</option>
+                            <option value="2">2 Threads</option>
+                            <option value="4">4 Threads</option>
+                            <option value="8">8 Threads</option>
+                            <option value="16">16 Threads</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Docker-specific Configuration -->
+            <div x-show="selectedMode.id.includes('docker')" class="mb-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Resource Limits</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Memory Limit</label>
+                        <select x-model="config.memoryLimit" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="1g">1 GB</option>
+                            <option value="2g">2 GB</option>
+                            <option value="4g">4 GB</option>
+                            <option value="8g">8 GB</option>
+                        </select>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">CPU Limit</label>
+                        <select x-model="config.cpuLimit" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            <option value="1">1 CPU</option>
+                            <option value="2">2 CPUs</option>
+                            <option value="4">4 CPUs</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Multi-instance Configuration -->
+            <div x-show="selectedMode.id === 'docker-multi'" class="mb-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Multi-Instance Settings</h3>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Node IDs (comma-separated)</label>
+                    <input type="text" x-model="config.nodeIds" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="e.g., node-01, node-02, node-03">
+                    <p class="text-xs text-gray-500 mt-1">Multiple node IDs for running in a single container</p>
+                </div>
+            </div>
+
+            <!-- Advanced Configuration -->
+            <div class="mb-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Advanced Options</h3>
+                <div class="space-y-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" x-model="config.autoRestart" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <span class="ml-2 text-sm text-gray-700">Auto-restart on failure</span>
+                    </label>
+                    
+                    <label class="flex items-center">
+                        <input type="checkbox" x-model="config.enableLogging" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        <span class="ml-2 text-sm text-gray-700">Enable detailed logging</span>
+                    </label>
+                    
+                    <div x-show="selectedMode.id === 'native'">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Additional Arguments</label>
+                        <input type="text" x-model="config.additionalArgs" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="e.g., --verbose --config /path/to/config">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-between">
+            <button @click="prevStep()" 
+                    class="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">
+                Previous
+            </button>
+            <button @click="nextStep()" 
+                    :disabled="!config.nodeId"
+                    class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+                Next Step
+            </button>
         </div>
     </div>
 
-    <!-- Logs Modal -->
-    <div x-show="showLogsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
-         @click.self="showLogsModal = false">
-        <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-medium text-gray-900">Container Logs: <span x-text="selectedContainer"></span></h3>
-                <button @click="showLogsModal = false" class="text-gray-400 hover:text-gray-600">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
+    <!-- Step 3: Deploy -->
+    <div x-show="step === 3" x-cloak>
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-2">Review and Deploy</h2>
+            <p class="text-gray-600">Review your configuration and deploy the instance</p>
+        </div>
+
+        <!-- Configuration Summary -->
+        <div class="bg-white shadow rounded-lg border border-gray-200 p-6 mb-8">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Configuration Summary</h3>
+            
+            <dl class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Deployment Mode</dt>
+                    <dd class="text-sm text-gray-900" x-text="selectedMode.name"></dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Instance ID</dt>
+                    <dd class="text-sm text-gray-900" x-text="config.nodeId"></dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Threads</dt>
+                    <dd class="text-sm text-gray-900" x-text="config.threads"></dd>
+                </div>
+                <div x-show="selectedMode.id.includes('docker')">
+                    <dt class="text-sm font-medium text-gray-500">Memory Limit</dt>
+                    <dd class="text-sm text-gray-900" x-text="config.memoryLimit"></dd>
+                </div>
+                <div x-show="selectedMode.id.includes('docker')">
+                    <dt class="text-sm font-medium text-gray-500">CPU Limit</dt>
+                    <dd class="text-sm text-gray-900" x-text="config.cpuLimit"></dd>
+                </div>
+                <div x-show="selectedMode.id === 'docker-multi'">
+                    <dt class="text-sm font-medium text-gray-500">Node IDs</dt>
+                    <dd class="text-sm text-gray-900" x-text="config.nodeIds"></dd>
+                </div>
+            </dl>
+        </div>
+
+        <!-- Deployment Status -->
+        <div x-show="isDeploying" class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+            <div class="flex items-center">
+                <div class="loading-spinner mr-3"></div>
+                <div>
+                    <h3 class="text-lg font-medium text-blue-900">Deploying Instance...</h3>
+                    <p class="text-blue-700" x-text="deploymentStatus"></p>
+                </div>
             </div>
-            <div class="bg-black text-green-400 p-4 rounded-md font-mono text-sm h-96 overflow-y-auto">
-                <pre x-text="containerLogs"></pre>
+        </div>
+
+        <!-- Deployment Result -->
+        <div x-show="deploymentResult" class="mb-8">
+            <div x-show="deploymentResult?.success" class="bg-green-50 border border-green-200 rounded-lg p-6">
+                <div class="flex items-center">
+                    <i class="fas fa-check-circle text-green-600 text-2xl mr-3"></i>
+                    <div>
+                        <h3 class="text-lg font-medium text-green-900">Instance Created Successfully!</h3>
+                        <p class="text-green-700">Your Nexus CLI instance is now running.</p>
+                        <div class="mt-4 space-x-3">
+                            <a href="/instances" class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                                <i class="fas fa-list mr-2"></i>
+                                View All Instances
+                            </a>
+                            <button @click="createAnother()" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                                <i class="fas fa-plus mr-2"></i>
+                                Create Another
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
+            
+            <div x-show="deploymentResult && !deploymentResult.success" class="bg-red-50 border border-red-200 rounded-lg p-6">
+                <div class="flex items-center">
+                    <i class="fas fa-exclamation-circle text-red-600 text-2xl mr-3"></i>
+                    <div>
+                        <h3 class="text-lg font-medium text-red-900">Deployment Failed</h3>
+                        <p class="text-red-700" x-text="deploymentResult?.error"></p>
+                        <button @click="retryDeployment()" class="mt-4 inline-flex items-center px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
+                            <i class="fas fa-redo mr-2"></i>
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div x-show="!isDeploying && !deploymentResult" class="flex justify-between">
+            <button @click="prevStep()" 
+                    class="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">
+                Previous
+            </button>
+            <button @click="deployInstance()" 
+                    class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700">
+                <i class="fas fa-rocket mr-2"></i>
+                Deploy Instance
+            </button>
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-function nexusManager() {
+function createInstanceData() {
     return {
-        // Data
-        containers: [],
-        metrics: {},
-        creating: false,
-        showLogsModal: false,
-        selectedContainer: '',
-        containerLogs: '',
-        
-        // Form data
-        singleNode: {
+        step: 1,
+        availableModes: [],
+        selectedMode: {},
+        config: {
             nodeId: '',
             threads: 4,
             memoryLimit: '2g',
-            cpuLimit: 2.0
-        },
-        multiNode: {
+            cpuLimit: 2,
             nodeIds: '',
-            totalThreads: 16,
-            memoryLimit: '4g',
-            cpuLimit: 4.0
+            autoRestart: true,
+            enableLogging: true,
+            additionalArgs: ''
         },
-
-        // Initialize
-        async init() {
-            await this.loadContainers();
-            await this.loadMetrics();
-            // Auto-refresh every 30 seconds
-            setInterval(() => {
-                this.loadContainers();
-                this.loadMetrics();
-            }, 30000);
+        isDeploying: false,
+        deploymentStatus: '',
+        deploymentResult: null,
+        
+        init() {
+            this.loadDeploymentModes();
+            this.generateDefaultNodeId();
+            
+            // Check for pre-selected mode from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            const preselectedMode = urlParams.get('mode');
+            if (preselectedMode) {
+                this.selectModeById(preselectedMode);
+            }
         },
-
-        // Load containers
-        async loadContainers() {
+        
+        async loadDeploymentModes() {
             try {
-                const response = await fetch('/api/containers/list');
-                const data = await response.json();
-                if (data.success) {
-                    this.containers = data.containers;
-                    this.metrics.runningContainers = data.running;
-                    this.metrics.totalContainers = data.total;
-                }
+                const response = await fetch('/api/deployment-modes');
+                this.availableModes = await response.json();
             } catch (error) {
-                console.error('Failed to load containers:', error);
+                console.error('Failed to load deployment modes:', error);
             }
         },
-
-        // Load system metrics
-        async loadMetrics() {
-            try {
-                const response = await fetch('/api/metrics');
-                const data = await response.json();
-                if (data.cpu_percent !== undefined) {
-                    this.metrics.cpuPercent = data.cpu_percent;
-                }
-                if (data.memory && data.memory.percent !== undefined) {
-                    this.metrics.memoryPercent = data.memory.percent;
-                }
-            } catch (error) {
-                console.error('Failed to load metrics:', error);
+        
+        selectModeById(modeId) {
+            const mode = this.availableModes.find(m => m.id === modeId);
+            if (mode) {
+                this.selectedMode = mode;
+                this.nextStep();
             }
         },
-
-        // Create single container
-        async createSingleContainer() {
-            if (!this.singleNode.nodeId) {
-                alert('Node ID is required');
-                return;
+        
+        generateDefaultNodeId() {
+            const timestamp = Date.now().toString().slice(-6);
+            this.config.nodeId = `nexus-${timestamp}`;
+        },
+        
+        nextStep() {
+            if (this.step < 3) {
+                this.step++;
             }
-
-            this.creating = true;
+        },
+        
+        prevStep() {
+            if (this.step > 1) {
+                this.step--;
+                this.deploymentResult = null;
+            }
+        },
+        
+        async deployInstance() {
+            this.isDeploying = true;
+            this.deploymentStatus = 'Preparing deployment...';
+            
             try {
-                const response = await fetch('/api/containers/create-single', {
+                // Prepare deployment data
+                const deploymentData = {
+                    mode: this.selectedMode.id,
+                    node_id: this.config.nodeId,
+                    threads: parseInt(this.config.threads),
+                    memory_limit: this.config.memoryLimit,
+                    cpu_limit: parseFloat(this.config.cpuLimit),
+                    auto_restart: this.config.autoRestart,
+                    enable_logging: this.config.enableLogging
+                };
+                
+                // Add mode-specific data
+                if (this.selectedMode.id === 'docker-multi') {
+                    deploymentData.node_ids = this.config.nodeIds.split(',').map(id => id.trim());
+                }
+                
+                if (this.selectedMode.id === 'native') {
+                    deploymentData.additional_args = this.config.additionalArgs.split(' ').filter(arg => arg.trim());
+                }
+                
+                this.deploymentStatus = 'Creating instance...';
+                
+                const response = await fetch('/api/instances', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(this.singleNode)
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(deploymentData)
                 });
                 
-                const result = await response.json();
-                if (result.success) {
-                    alert('Single container created successfully!');
-                    this.singleNode.nodeId = '';
-                    await this.loadContainers();
-                } else {
-                    alert('Error: ' + result.error);
+                this.deploymentResult = await response.json();
+                
+                if (this.deploymentResult.success) {
+                    this.deploymentStatus = 'Instance created successfully!';
                 }
+                
             } catch (error) {
-                alert('Failed to create container: ' + error.message);
+                console.error('Deployment failed:', error);
+                this.deploymentResult = {
+                    success: false,
+                    error: 'Failed to deploy instance: ' + error.message
+                };
             } finally {
-                this.creating = false;
+                this.isDeploying = false;
             }
         },
-
-        // Create multi container
-        async createMultiContainer() {
-            if (!this.multiNode.nodeIds) {
-                alert('Node IDs are required');
-                return;
-            }
-
-            const nodeIds = this.multiNode.nodeIds.split(',').map(id => id.trim()).filter(id => id);
-            if (nodeIds.length < 2) {
-                alert('At least 2 node IDs are required for multi-node container');
-                return;
-            }
-
-            this.creating = true;
-            try {
-                const response = await fetch('/api/containers/create-multi', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        node_ids: nodeIds,
-                        total_threads: this.multiNode.totalThreads,
-                        memory_limit: this.multiNode.memoryLimit,
-                        cpu_limit: this.multiNode.cpuLimit
-                    })
-                });
-                
-                const result = await response.json();
-                if (result.success) {
-                    alert('Multi-node container created successfully!');
-                    this.multiNode.nodeIds = '';
-                    await this.loadContainers();
-                } else {
-                    alert('Error: ' + result.error);
-                }
-            } catch (error) {
-                alert('Failed to create container: ' + error.message);
-            } finally {
-                this.creating = false;
-            }
+        
+        retryDeployment() {
+            this.deploymentResult = null;
+            this.deployInstance();
         },
-
-        // Container actions
-        async containerAction(containerName, action) {
-            try {
-                const response = await fetch(`/api/container/${containerName}/${action}`, {
-                    method: 'POST'
-                });
-                
-                const result = await response.json();
-                if (result.success) {
-                    await this.loadContainers();
-                } else {
-                    alert('Error: ' + result.error);
-                }
-            } catch (error) {
-                alert('Action failed: ' + error.message);
-            }
-        },
-
-        // View logs
-        async viewLogs(containerName) {
-            try {
-                const response = await fetch(`/api/logs/${containerName}`);
-                this.containerLogs = await response.text();
-                this.selectedContainer = containerName;
-                this.showLogsModal = true;
-            } catch (error) {
-                alert('Failed to load logs: ' + error.message);
-            }
-        },
-
-        // Refresh containers
-        async refreshContainers() {
-            await this.loadContainers();
-            await this.loadMetrics();
+        
+        createAnother() {
+            this.step = 1;
+            this.selectedMode = {};
+            this.deploymentResult = null;
+            this.generateDefaultNodeId();
         }
     }
 }

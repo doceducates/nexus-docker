@@ -1,495 +1,445 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Nexus CLI Docker Manager{% endblock %}</title>
+    <title>{% block title %}Nexus CLI Manager{% endblock %}</title>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js -->
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <!-- Chart.js for metrics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Socket.IO for real-time updates -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.js"></script>
+    
     <style>
         [x-cloak] { display: none !important; }
         
-        /* Modal styles */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
         
-        .modal-content {
-            background-color: white;
-            margin: 5% auto;
-            padding: 0;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 600px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        /* Gradient backgrounds */
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         
-        .logs-modal .modal-content {
-            max-width: 80%;
-            height: 80%;
+        .gradient-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
         }
         
-        .modal-header {
-            padding: 20px;
-            border-bottom: 1px solid #e5e7eb;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+        /* Loading animation */
+        .loading-spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
         }
         
-        .modal-body {
-            padding: 20px;
-            max-height: 70vh;
-            overflow-y: auto;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         
-        .close {
-            color: #6b7280;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
+        /* Status indicators */
+        .status-running { 
+            @apply bg-green-100 text-green-800 border-green-200;
+        }
+        .status-stopped { 
+            @apply bg-red-100 text-red-800 border-red-200;
+        }
+        .status-paused { 
+            @apply bg-yellow-100 text-yellow-800 border-yellow-200;
         }
         
-        .close:hover {
-            color: #374151;
+        /* Mode badges */
+        .mode-native {
+            @apply bg-blue-100 text-blue-800 border-blue-200;
+        }
+        .mode-docker {
+            @apply bg-purple-100 text-purple-800 border-purple-200;
+        }
+        .mode-compose {
+            @apply bg-orange-100 text-orange-800 border-orange-200;
         }
         
-        /* Node management styles */
-        .page-header {
-            margin-bottom: 2rem;
-        }
-        
-        .page-header h1 {
-            font-size: 2rem;
-            font-weight: bold;
-            color: #111827;
-            margin-bottom: 0.5rem;
-        }
-        
-        .quick-actions {
-            margin-bottom: 2rem;
-            display: flex;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-        
-        .nodes-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 1.5rem;
-            margin-top: 1rem;
-        }
-        
-        .node-card {
-            background: white;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-        
-        .node-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
-        
-        .node-header h3 {
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: #111827;
-        }
-        
-        .status-badge {
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-            text-transform: uppercase;
-        }
-        
-        .status-running {
-            background-color: #d1fae5;
-            color: #065f46;
-        }
-        
-        .status-stopped {
-            background-color: #fee2e2;
-            color: #991b1b;
-        }
-        
-        .status-exited {
-            background-color: #fef3c7;
-            color: #92400e;
-        }
-        
-        .node-details {
-            margin-bottom: 1rem;
-        }
-        
-        .node-details p {
-            margin-bottom: 0.5rem;
-            font-size: 0.875rem;
-            color: #6b7280;
-        }
-        
-        .node-actions {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
-        
-        .available-slots {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-            margin-top: 1rem;
-        }
-        
-        .slot-badge {
-            background-color: #f3f4f6;
-            color: #374151;
-            padding: 0.25rem 0.75rem;
-            border-radius: 9999px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: #6b7280;
-        }
-        
-        .section {
-            margin-bottom: 2rem;
-        }
-        
-        .section h2 {
-            font-size: 1.5rem;
-            font-weight: 600;
-            color: #111827;
-            margin-bottom: 1rem;
-        }
-        
-        /* Form styles */
-        .form-group {
-            margin-bottom: 1rem;
-        }
-        
-        .form-group label {
-            display: block;
-            font-weight: 500;
-            color: #374151;
-            margin-bottom: 0.5rem;
-        }
-        
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-            font-size: 0.875rem;
-        }
-        
-        .form-group small {
-            color: #6b7280;
-            font-size: 0.75rem;
-        }
-        
-        .form-actions {
-            margin-top: 1.5rem;
-            display: flex;
-            gap: 1rem;
-        }
-        
-        /* Button styles */
-        .btn {
-            padding: 0.5rem 1rem;
-            border: none;
-            border-radius: 4px;
-            font-weight: 500;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            transition: all 0.2s;
-        }
-        
-        .btn-primary {
-            background-color: #3b82f6;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background-color: #2563eb;
-        }
-        
-        .btn-secondary {
-            background-color: #6b7280;
-            color: white;
-        }
-        
-        .btn-secondary:hover {
-            background-color: #4b5563;
-        }
-        
-        .btn-success {
-            background-color: #10b981;
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background-color: #059669;
-        }
-        
-        .btn-warning {
-            background-color: #f59e0b;
-            color: white;
-        }
-        
-        .btn-warning:hover {
-            background-color: #d97706;
-        }
-        
-        .btn-danger {
-            background-color: #ef4444;
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background-color: #dc2626;
-        }
-        
-        .btn-info {
-            background-color: #06b6d4;
-            color: white;
-        }
-        
-        .btn-info:hover {
-            background-color: #0891b2;
-        }
-        
-        .btn-sm {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.75rem;
-        }
-        
-        /* Logs container */
-        .logs-container {
-            height: 60vh;
-            overflow-y: auto;
-            background-color: #111827;
-            border-radius: 4px;
-            padding: 1rem;
-        }
-        
-        .logs-container pre {
-            color: #f9fafb;
-            font-family: 'Courier New', monospace;
-            font-size: 0.75rem;
-            line-height: 1.4;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        
-        /* Notifications */
-        .notification {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 1rem 1.5rem;
-            border-radius: 4px;
-            color: white;
-            font-weight: 500;
-            z-index: 1001;
-            animation: slideIn 0.3s ease-out;
-        }
-        
-        .notification-success {
-            background-color: #10b981;
-        }
-        
-        .notification-error {
-            background-color: #ef4444;
-        }
-        
-        .notification-info {
-            background-color: #3b82f6;
-        }
-        
-        @keyframes slideIn {
-            from {
-                transform: translateX(100%);
-                opacity: 0;
+        /* Responsive navigation */
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease-in-out;
             }
-            to {
+            .sidebar.open {
                 transform: translateX(0);
-                opacity: 1;
             }
         }
     </style>
+    
+    <script>
+        // Tailwind config
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'nexus-blue': '#3b82f6',
+                        'nexus-purple': '#8b5cf6',
+                        'nexus-green': '#10b981',
+                        'nexus-orange': '#f59e0b',
+                        'nexus-red': '#ef4444',
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body class="bg-gray-50">
-    <div x-data="{ sidebarOpen: false }" class="flex h-screen bg-gray-50">
-        <!-- Sidebar -->
-        <div :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'" 
-             class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0">
-            <div class="flex items-center justify-center h-16 px-4 bg-indigo-600">
-                <h1 class="text-xl font-bold text-white">Nexus Manager</h1>
-            </div>
-            <nav class="mt-5 px-2">
-                <a href="{{ url_for('index') }}" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900">
-                    <i class="fas fa-tachometer-alt mr-4 text-gray-400 group-hover:text-gray-500"></i>
+<body class="h-full bg-gray-50" x-data="appData()" x-init="init()">
+    <!-- Mobile menu overlay -->
+    <div x-show="sidebarOpen" x-cloak class="fixed inset-0 z-40 md:hidden">
+        <div class="fixed inset-0 bg-gray-600 bg-opacity-75" @click="sidebarOpen = false"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg md:block"
+         :class="{'translate-x-0': sidebarOpen, '-translate-x-full': !sidebarOpen}"
+         x-cloak>
+        
+        <!-- Logo -->
+        <div class="flex items-center justify-center h-16 bg-gradient-to-r from-nexus-blue to-nexus-purple">
+            <h1 class="text-xl font-bold text-white">
+                <i class="fas fa-cube mr-2"></i>Nexus Manager
+            </h1>
+        </div>
+        
+        <!-- Navigation -->
+        <nav class="mt-5 px-2">
+            <div class="space-y-1">
+                <!-- Dashboard -->
+                <a href="/" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                   :class="{'bg-gray-100 text-gray-900': currentPage === 'dashboard'}">
+                    <i class="fas fa-tachometer-alt mr-3 text-gray-400 group-hover:text-gray-500"></i>
                     Dashboard
                 </a>
-                <a href="{{ url_for('create_page') }}" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900">
-                    <i class="fas fa-plus-circle mr-4 text-gray-400 group-hover:text-gray-500"></i>
-                    Create Container
+                
+                <!-- Instances -->
+                <a href="/instances" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                   :class="{'bg-gray-100 text-gray-900': currentPage === 'instances'}">
+                    <i class="fas fa-server mr-3 text-gray-400 group-hover:text-gray-500"></i>
+                    Instances
                 </a>
-                <a href="{{ url_for('containers_page') }}" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900">
-                    <i class="fas fa-cube mr-4 text-gray-400 group-hover:text-gray-500"></i>
-                    Containers
+                
+                <!-- Create -->
+                <a href="/create" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                   :class="{'bg-gray-100 text-gray-900': currentPage === 'create'}">
+                    <i class="fas fa-plus-circle mr-3 text-gray-400 group-hover:text-gray-500"></i>
+                    Create Instance
                 </a>
-                <a href="{{ url_for('nodes_page') }}" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900">
-                    <i class="fas fa-server mr-4 text-gray-400 group-hover:text-gray-500"></i>
-                    Node Management
+                
+                <!-- Settings -->
+                <a href="/settings" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                   :class="{'bg-gray-100 text-gray-900': currentPage === 'settings'}">
+                    <i class="fas fa-cog mr-3 text-gray-400 group-hover:text-gray-500"></i>
+                    Settings
                 </a>
-                <a href="{{ url_for('deploy_page') }}" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900">
-                    <i class="fas fa-rocket mr-4 text-gray-400 group-hover:text-gray-500"></i>
-                    Deploy
+                
+                <!-- Logs -->
+                <a href="/logs" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                   :class="{'bg-gray-100 text-gray-900': currentPage === 'logs'}">
+                    <i class="fas fa-file-alt mr-3 text-gray-400 group-hover:text-gray-500"></i>
+                    System Logs
                 </a>
-                <a href="{{ url_for('logs_page') }}" class="group flex items-center px-2 py-2 text-base font-medium rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-900">
-                    <i class="fas fa-file-alt mr-4 text-gray-400 group-hover:text-gray-500"></i>
-                    Logs
-                </a>
-            </nav>
-        </div>
-
-        <!-- Main content -->
-        <div class="flex flex-col flex-1 overflow-hidden lg:pl-0">
-            <!-- Top navigation -->
-            <div class="relative z-10 flex items-center justify-between h-16 px-4 bg-white border-b border-gray-200 lg:px-6">
-                <button @click="sidebarOpen = !sidebarOpen" class="text-gray-500 focus:outline-none focus:text-gray-700 lg:hidden">
-                    <i class="fas fa-bars text-xl"></i>
-                </button>
-                <div class="flex items-center">
-                    <span class="text-sm text-gray-500" id="last-updated">Last updated: <span id="timestamp">{{ moment().format('HH:mm:ss') }}</span></span>
+            </div>
+            
+            <!-- Deployment Modes -->
+            <div class="mt-8">
+                <h3 class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Deployment Modes
+                </h3>
+                <div class="mt-2 space-y-1">
+                    <div class="px-3 py-2 text-sm">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 rounded-full" :class="capabilities.native ? 'bg-green-400' : 'bg-red-400'"></div>
+                            <span :class="capabilities.native ? 'text-gray-900' : 'text-gray-400'">Native Host</span>
+                        </div>
+                    </div>
+                    <div class="px-3 py-2 text-sm">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 rounded-full" :class="capabilities.docker ? 'bg-green-400' : 'bg-red-400'"></div>
+                            <span :class="capabilities.docker ? 'text-gray-900' : 'text-gray-400'">Docker</span>
+                        </div>
+                    </div>
+                    <div class="px-3 py-2 text-sm">
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 rounded-full" :class="capabilities.compose ? 'bg-green-400' : 'bg-red-400'"></div>
+                            <span :class="capabilities.compose ? 'text-gray-900' : 'text-gray-400'">Compose</span>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </nav>
+    </div>
 
-            <!-- Page content -->
-            <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
-                {% block content %}{% endblock %}
-            </main>
+    <!-- Main content -->
+    <div class="md:pl-64">
+        <!-- Top navigation -->
+        <div class="sticky top-0 z-10 bg-white shadow-sm border-b border-gray-200">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16">
+                    <div class="flex items-center">
+                        <!-- Mobile menu button -->
+                        <button @click="sidebarOpen = !sidebarOpen" class="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100">
+                            <i class="fas fa-bars text-lg"></i>
+                        </button>
+                        
+                        <!-- Page title -->
+                        <h1 class="ml-4 text-lg font-semibold text-gray-900">
+                            {% block page_title %}{% endblock %}
+                        </h1>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <!-- System Status -->
+                        <div class="flex items-center space-x-2">
+                            <div class="w-2 h-2 rounded-full" :class="systemOnline ? 'bg-green-400' : 'bg-red-400'"></div>
+                            <span class="text-sm text-gray-600" x-text="systemOnline ? 'Online' : 'Offline'"></span>
+                        </div>
+                        
+                        <!-- Refresh button -->
+                        <button @click="refreshData()" class="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100">
+                            <i class="fas fa-sync-alt" :class="{'animate-spin': isRefreshing}"></i>
+                        </button>
+                        
+                        <!-- User menu -->
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" class="flex items-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100">
+                                <i class="fas fa-user-circle text-lg"></i>
+                            </button>
+                            <div x-show="open" @click.away="open = false" x-cloak
+                                 class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                                <a href="/profile" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Profile</a>
+                                <a href="/logout" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Logout</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} mb-4 p-4 rounded-md border" 
+                             :class="{
+                                 'bg-green-50 border-green-200 text-green-800': '{{ category }}' === 'success',
+                                 'bg-red-50 border-red-200 text-red-800': '{{ category }}' === 'error',
+                                 'bg-yellow-50 border-yellow-200 text-yellow-800': '{{ category }}' === 'warning',
+                                 'bg-blue-50 border-blue-200 text-blue-800': '{{ category }}' === 'info'
+                             }">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    <i class="fas" 
+                                       :class="{
+                                           'fa-check-circle': '{{ category }}' === 'success',
+                                           'fa-exclamation-circle': '{{ category }}' === 'error',
+                                           'fa-exclamation-triangle': '{{ category }}' === 'warning',
+                                           'fa-info-circle': '{{ category }}' === 'info'
+                                       }"></i>
+                                </div>
+                                <div class="ml-3">{{ message }}</div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <!-- Page content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Loading overlay -->
+    <div x-show="isLoading" x-cloak class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 flex items-center space-x-3">
+            <div class="loading-spinner"></div>
+            <span class="text-gray-700">Loading...</span>
         </div>
     </div>
 
-    <!-- Toast notifications -->
-    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
-
-    <script>
-        // Auto refresh data
-        let refreshInterval;
-        
-        function startAutoRefresh() {
-            refreshInterval = setInterval(() => {
-                if (window.refreshData && typeof window.refreshData === 'function') {
-                    window.refreshData();
-                }
-                updateTimestamp();
-            }, 5000);
-        }
-
-        function stopAutoRefresh() {
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-            }
-        }
-
-        function updateTimestamp() {
-            const now = new Date();
-            document.getElementById('timestamp').textContent = now.toLocaleTimeString();
-        }
-
-        function showToast(message, type = 'info') {
-            const toastContainer = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            const colors = {
-                success: 'bg-green-500',
-                error: 'bg-red-500',
-                warning: 'bg-yellow-500',
-                info: 'bg-blue-500'
-            };
-            
-            toast.className = `${colors[type] || colors.info} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300`;
-            toast.innerHTML = `
-                <div class="flex items-center">
-                    <span>${message}</span>
-                    <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+    <!-- Notification toast -->
+    <div x-show="notification.show" x-cloak
+         x-transition:enter="transform ease-out duration-300 transition"
+         x-transition:enter-start="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
+         x-transition:enter-end="translate-y-0 opacity-100 sm:translate-x-0"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed top-4 right-4 max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden z-50">
+        <div class="p-4">
+            <div class="flex items-start">
+                <div class="flex-shrink-0">
+                    <i class="fas" 
+                       :class="{
+                           'fa-check-circle text-green-400': notification.type === 'success',
+                           'fa-exclamation-circle text-red-400': notification.type === 'error',
+                           'fa-exclamation-triangle text-yellow-400': notification.type === 'warning',
+                           'fa-info-circle text-blue-400': notification.type === 'info'
+                       }"></i>
+                </div>
+                <div class="ml-3 w-0 flex-1 pt-0.5">
+                    <p class="text-sm font-medium text-gray-900" x-text="notification.title"></p>
+                    <p class="mt-1 text-sm text-gray-500" x-text="notification.message"></p>
+                </div>
+                <div class="ml-4 flex-shrink-0 flex">
+                    <button @click="notification.show = false" class="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-            `;
-            
-            toastContainer.appendChild(toast);
-            
-            setTimeout(() => {
-                if (toast.parentElement) {
-                    toast.remove();
-                }
-            }, 5000);
-        }
+            </div>
+        </div>
+    </div>
 
-        // API helpers
-        async function apiCall(url, options = {}) {
-            try {
-                const response = await fetch(url, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...options.headers
-                    },
-                    ...options
-                });
+    <script>
+        // Main Alpine.js application data
+        function appData() {
+            return {
+                sidebarOpen: false,
+                currentPage: '{{ request.endpoint }}',
+                systemOnline: true,
+                isLoading: false,
+                isRefreshing: false,
+                notification: {
+                    show: false,
+                    type: 'info',
+                    title: '',
+                    message: ''
+                },
+                capabilities: {
+                    native: false,
+                    docker: false,
+                    compose: false
+                },
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                init() {
+                    this.loadCapabilities();
+                    this.initWebSocket();
+                    this.startHealthCheck();
+                },
+                
+                loadCapabilities() {
+                    fetch('/api/capabilities')
+                        .then(response => response.json())
+                        .then(data => {
+                            this.capabilities = data;
+                        })
+                        .catch(error => {
+                            console.error('Failed to load capabilities:', error);
+                        });
+                },
+                
+                initWebSocket() {
+                    if (typeof io !== 'undefined') {
+                        this.socket = io();
+                        
+                        this.socket.on('connect', () => {
+                            console.log('WebSocket connected');
+                            this.systemOnline = true;
+                        });
+                        
+                        this.socket.on('disconnect', () => {
+                            console.log('WebSocket disconnected');
+                            this.systemOnline = false;
+                        });
+                        
+                        this.socket.on('notification', (data) => {
+                            this.showNotification(data.type, data.title, data.message);
+                        });
+                    }
+                },
+                
+                startHealthCheck() {
+                    setInterval(() => {
+                        fetch('/api/health')
+                            .then(response => {
+                                this.systemOnline = response.ok;
+                            })
+                            .catch(() => {
+                                this.systemOnline = false;
+                            });
+                    }, 30000); // Check every 30 seconds
+                },
+                
+                refreshData() {
+                    this.isRefreshing = true;
+                    // Trigger refresh event for current page
+                    window.dispatchEvent(new CustomEvent('refresh-data'));
+                    setTimeout(() => {
+                        this.isRefreshing = false;
+                    }, 1000);
+                },
+                
+                showNotification(type, title, message) {
+                    this.notification = {
+                        show: true,
+                        type: type,
+                        title: title,
+                        message: message
+                    };
+                    
+                    // Auto-hide after 5 seconds
+                    setTimeout(() => {
+                        this.notification.show = false;
+                    }, 5000);
+                },
+                
+                setLoading(loading) {
+                    this.isLoading = loading;
                 }
-                
-                return await response.json();
-            } catch (error) {
-                console.error('API call failed:', error);
-                showToast(`API call failed: ${error.message}`, 'error');
-                throw error;
             }
         }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            updateTimestamp();
-            startAutoRefresh();
+        
+        // Utility functions
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+        
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / 86400);
+            const hours = Math.floor((seconds % 86400) / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
             
-            // Stop refresh when page is hidden
-            document.addEventListener('visibilitychange', function() {
-                if (document.hidden) {
-                    stopAutoRefresh();
-                } else {
-                    startAutoRefresh();
-                }
-            });
-        });
+            if (days > 0) {
+                return `${days}d ${hours}h ${minutes}m`;
+            } else if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            } else {
+                return `${minutes}m`;
+            }
+        }
     </script>
     
     {% block scripts %}{% endblock %}

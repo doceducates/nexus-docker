@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div x-data="nexusManager()" x-init="init()">
+    <!-- Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Nexus Docker Manager</h1>
+        <p class="mt-2 text-gray-600">Create and manage Nexus CLI Docker containers dynamically</p>
+    </div>
+
+    <!-- Action Cards -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Create Single Node Container -->
+        <div class="bg-white shadow-lg rounded-lg p-6">
+            <div class="flex items-center mb-4">
+                <div class="p-2 bg-blue-100 rounded-lg">
+                    <i class="fas fa-cube text-blue-600 text-xl"></i>
+                </div>
+                <h3 class="ml-3 text-lg font-semibold text-gray-900">Single Node Container</h3>
+            </div>
+            <p class="text-gray-600 mb-4">Create a container with one Nexus CLI node. Best for isolated testing or small deployments.</p>
+            
+            <form @submit.prevent="createSingleContainer()">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Node ID</label>
+                        <input type="text" x-model="singleNode.nodeId" 
+                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="e.g., 123456" required>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">CPU Threads</label>
+                            <input type="number" x-model="singleNode.threads" min="1" max="16"
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Memory Limit</label>
+                            <select x-model="singleNode.memoryLimit" 
+                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="1g">1 GB</option>
+                                <option value="2g">2 GB</option>
+                                <option value="4g">4 GB</option>
+                                <option value="8g">8 GB</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">CPU Limit</label>
+                        <input type="number" x-model="singleNode.cpuLimit" min="0.5" max="8" step="0.5"
+                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                <button type="submit" :disabled="creating" 
+                        class="mt-4 w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!creating">Create Single Container</span>
+                    <span x-show="creating">Creating...</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Create Multi-Node Container -->
+        <div class="bg-white shadow-lg rounded-lg p-6">
+            <div class="flex items-center mb-4">
+                <div class="p-2 bg-green-100 rounded-lg">
+                    <i class="fas fa-cubes text-green-600 text-xl"></i>
+                </div>
+                <h3 class="ml-3 text-lg font-semibold text-gray-900">Multi-Node Container</h3>
+            </div>
+            <p class="text-gray-600 mb-4">Create a container with multiple Nexus CLI nodes. Efficient resource sharing for production use.</p>
+            
+            <form @submit.prevent="createMultiContainer()">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Node IDs (comma-separated)</label>
+                        <input type="text" x-model="multiNode.nodeIds" 
+                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                               placeholder="e.g., 123456,789012,345678" required>
+                        <p class="mt-1 text-xs text-gray-500">Enter at least 2 node IDs separated by commas</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Total Threads</label>
+                            <input type="number" x-model="multiNode.totalThreads" min="2" max="32"
+                                   class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Memory Limit</label>
+                            <select x-model="multiNode.memoryLimit" 
+                                    class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                <option value="2g">2 GB</option>
+                                <option value="4g">4 GB</option>
+                                <option value="8g">8 GB</option>
+                                <option value="16g">16 GB</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">CPU Limit</label>
+                        <input type="number" x-model="multiNode.cpuLimit" min="1" max="16" step="0.5"
+                               class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+                <button type="submit" :disabled="creating" 
+                        class="mt-4 w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!creating">Create Multi-Node Container</span>
+                    <span x-show="creating">Creating...</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- System Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-play-circle text-green-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Running Containers</dt>
+                            <dd class="text-lg font-medium text-gray-900" x-text="metrics.runningContainers || 0"></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-cubes text-blue-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Total Containers</dt>
+                            <dd class="text-lg font-medium text-gray-900" x-text="metrics.totalContainers || 0"></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-microchip text-purple-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">CPU Usage</dt>
+                            <dd class="text-lg font-medium text-gray-900" x-text="(metrics.cpuPercent || 0).toFixed(1) + '%'"></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white overflow-hidden shadow rounded-lg">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-memory text-orange-400 text-2xl"></i>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Memory Usage</dt>
+                            <dd class="text-lg font-medium text-gray-900" x-text="(metrics.memoryPercent || 0).toFixed(1) + '%'"></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Container List -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-md">
+        <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
+            <div>
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Active Containers</h3>
+                <p class="mt-1 max-w-2xl text-sm text-gray-500">Manage your Nexus CLI containers</p>
+            </div>
+            <button @click="refreshContainers()" 
+                    class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+        </div>
+        <ul class="divide-y divide-gray-200" x-show="containers.length > 0">
+            <template x-for="container in containers" :key="container.id">
+                <li class="px-4 py-4 sm:px-6">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="flex-shrink-0">
+                                <div class="w-3 h-3 rounded-full" 
+                                     :class="container.status === 'running' ? 'bg-green-400' : 'bg-red-400'"></div>
+                            </div>
+                            <div class="ml-4">
+                                <div class="flex items-center">
+                                    <div class="text-sm font-medium text-gray-900" x-text="container.name"></div>
+                                    <div class="ml-2 flex-shrink-0 flex">
+                                        <p class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                           :class="container.status === 'running' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                           x-text="container.status"></p>
+                                    </div>
+                                </div>
+                                <div class="text-sm text-gray-500">
+                                    <span x-text="container.image"></span>
+                                    <span class="mx-2">•</span>
+                                    <span x-text="container.id"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button @click="containerAction(container.name, 'start')" 
+                                    x-show="container.status !== 'running'"
+                                    class="text-green-600 hover:text-green-900">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <button @click="containerAction(container.name, 'stop')" 
+                                    x-show="container.status === 'running'"
+                                    class="text-yellow-600 hover:text-yellow-900">
+                                <i class="fas fa-stop"></i>
+                            </button>
+                            <button @click="containerAction(container.name, 'restart')" 
+                                    x-show="container.status === 'running'"
+                                    class="text-blue-600 hover:text-blue-900">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                            <button @click="viewLogs(container.name)" 
+                                    class="text-purple-600 hover:text-purple-900">
+                                <i class="fas fa-file-alt"></i>
+                            </button>
+                            <button @click="containerAction(container.name, 'remove')" 
+                                    x-show="container.status !== 'running'"
+                                    class="text-red-600 hover:text-red-900">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </li>
+            </template>
+        </ul>
+        <div x-show="containers.length === 0" class="px-4 py-8 text-center text-gray-500">
+            <i class="fas fa-cube text-4xl mb-4"></i>
+            <p>No containers found. Create your first container above.</p>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div x-show="showLogsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+         @click.self="showLogsModal = false">
+        <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Container Logs: <span x-text="selectedContainer"></span></h3>
+                <button @click="showLogsModal = false" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="bg-black text-green-400 p-4 rounded-md font-mono text-sm h-96 overflow-y-auto">
+                <pre x-text="containerLogs"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function nexusManager() {
+    return {
+        // Data
+        containers: [],
+        metrics: {},
+        creating: false,
+        showLogsModal: false,
+        selectedContainer: '',
+        containerLogs: '',
+        
+        // Form data
+        singleNode: {
+            nodeId: '',
+            threads: 4,
+            memoryLimit: '2g',
+            cpuLimit: 2.0
+        },
+        multiNode: {
+            nodeIds: '',
+            totalThreads: 16,
+            memoryLimit: '4g',
+            cpuLimit: 4.0
+        },
+
+        // Initialize
+        async init() {
+            await this.loadContainers();
+            await this.loadMetrics();
+            // Auto-refresh every 30 seconds
+            setInterval(() => {
+                this.loadContainers();
+                this.loadMetrics();
+            }, 30000);
+        },
+
+        // Load containers
+        async loadContainers() {
+            try {
+                const response = await fetch('/api/containers/list');
+                const data = await response.json();
+                if (data.success) {
+                    this.containers = data.containers;
+                    this.metrics.runningContainers = data.running;
+                    this.metrics.totalContainers = data.total;
+                }
+            } catch (error) {
+                console.error('Failed to load containers:', error);
+            }
+        },
+
+        // Load system metrics
+        async loadMetrics() {
+            try {
+                const response = await fetch('/api/metrics');
+                const data = await response.json();
+                if (data.cpu_percent !== undefined) {
+                    this.metrics.cpuPercent = data.cpu_percent;
+                }
+                if (data.memory && data.memory.percent !== undefined) {
+                    this.metrics.memoryPercent = data.memory.percent;
+                }
+            } catch (error) {
+                console.error('Failed to load metrics:', error);
+            }
+        },
+
+        // Create single container
+        async createSingleContainer() {
+            if (!this.singleNode.nodeId) {
+                alert('Node ID is required');
+                return;
+            }
+
+            this.creating = true;
+            try {
+                const response = await fetch('/api/containers/create-single', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.singleNode)
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Single container created successfully!');
+                    this.singleNode.nodeId = '';
+                    await this.loadContainers();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Failed to create container: ' + error.message);
+            } finally {
+                this.creating = false;
+            }
+        },
+
+        // Create multi container
+        async createMultiContainer() {
+            if (!this.multiNode.nodeIds) {
+                alert('Node IDs are required');
+                return;
+            }
+
+            const nodeIds = this.multiNode.nodeIds.split(',').map(id => id.trim()).filter(id => id);
+            if (nodeIds.length < 2) {
+                alert('At least 2 node IDs are required for multi-node container');
+                return;
+            }
+
+            this.creating = true;
+            try {
+                const response = await fetch('/api/containers/create-multi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        node_ids: nodeIds,
+                        total_threads: this.multiNode.totalThreads,
+                        memory_limit: this.multiNode.memoryLimit,
+                        cpu_limit: this.multiNode.cpuLimit
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('Multi-node container created successfully!');
+                    this.multiNode.nodeIds = '';
+                    await this.loadContainers();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Failed to create container: ' + error.message);
+            } finally {
+                this.creating = false;
+            }
+        },
+
+        // Container actions
+        async containerAction(containerName, action) {
+            try {
+                const response = await fetch(`/api/container/${containerName}/${action}`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    await this.loadContainers();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Action failed: ' + error.message);
+            }
+        },
+
+        // View logs
+        async viewLogs(containerName) {
+            try {
+                const response = await fetch(`/api/logs/${containerName}`);
+                this.containerLogs = await response.text();
+                this.selectedContainer = containerName;
+                this.showLogsModal = true;
+            } catch (error) {
+                alert('Failed to load logs: ' + error.message);
+            }
+        },
+
+        // Refresh containers
+        async refreshContainers() {
+            await this.loadContainers();
+            await this.loadMetrics();
+        }
+    }
+}
+</script>
+{% endblock %}

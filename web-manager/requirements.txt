@@ -9,3 +9,6 @@ MarkupSafe>=3.0.2
 itsdangerous>=2.2.0
 click>=8.2.1
 requests>=2.32.4
+flask-socketio>=5.3.6
+psutil>=5.9.8
+pathlib>=1.0.1

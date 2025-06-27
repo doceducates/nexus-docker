@@ -1,0 +1,422 @@
+{% extends "base.html" %}
+
+{% block title %}Instances - Nexus CLI Manager{% endblock %}
+{% block page_title %}Instance Management{% endblock %}
+
+{% block content %}
+<div x-data="instancesData()" x-init="init()">
+    <!-- Actions Bar -->
+    <div class="flex justify-between items-center mb-6">
+        <div class="flex space-x-4">
+            <button @click="refreshInstances()" 
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+                <i class="fas fa-sync-alt mr-2" :class="{'animate-spin': isRefreshing}"></i>
+                Refresh
+            </button>
+            
+            <select x-model="filterMode" @change="filterInstances()"
+                    class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <option value="all">All Modes</option>
+                <option value="native">Native Only</option>
+                <option value="docker">Docker Only</option>
+                <option value="compose">Compose Only</option>
+            </select>
+            
+            <select x-model="filterStatus" @change="filterInstances()"
+                    class="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <option value="all">All Status</option>
+                <option value="running">Running</option>
+                <option value="stopped">Stopped</option>
+                <option value="paused">Paused</option>
+            </select>
+        </div>
+        
+        <a href="/create" 
+           class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700">
+            <i class="fas fa-plus mr-2"></i>
+            Create Instance
+        </a>
+    </div>
+
+    <!-- Instances Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        <template x-for="instance in filteredInstances" :key="instance.node_id">
+            <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+                <!-- Header -->
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 rounded-lg flex items-center justify-center mr-3"
+                                 :class="{
+                                     'bg-blue-100': instance.mode === 'native',
+                                     'bg-purple-100': instance.mode === 'docker',
+                                     'bg-orange-100': instance.mode === 'compose'
+                                 }">
+                                <i :class="{
+                                     'fas fa-desktop text-blue-600': instance.mode === 'native',
+                                     'fab fa-docker text-purple-600': instance.mode === 'docker',
+                                     'fas fa-cubes text-orange-600': instance.mode === 'compose'
+                                   }"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-900" x-text="instance.node_id"></h3>
+                                <p class="text-sm text-gray-500" x-text="instance.container_name || 'Native Process'"></p>
+                            </div>
+                        </div>
+                        
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+                              :class="{
+                                  'bg-green-100 text-green-800 border-green-200': instance.status === 'running',
+                                  'bg-red-100 text-red-800 border-red-200': instance.status === 'stopped',
+                                  'bg-yellow-100 text-yellow-800 border-yellow-200': instance.status === 'paused'
+                              }" x-text="instance.status"></span>
+                    </div>
+                </div>
+                
+                <!-- Content -->
+                <div class="px-6 py-4">
+                    <!-- Mode Badge -->
+                    <div class="mb-4">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+                              :class="{
+                                  'bg-blue-100 text-blue-800 border-blue-200': instance.mode === 'native',
+                                  'bg-purple-100 text-purple-800 border-purple-200': instance.mode === 'docker',
+                                  'bg-orange-100 text-orange-800 border-orange-200': instance.mode === 'compose'
+                              }" x-text="instance.mode"></span>
+                    </div>
+                    
+                    <!-- Stats -->
+                    <div x-show="instance.stats || instance.cpu_percent !== undefined" class="mb-4">
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <dt class="font-medium text-gray-500">CPU</dt>
+                                <dd class="text-gray-900" x-text="(instance.cpu_percent || instance.stats?.cpu_percent || 0) + '%'"></dd>
+                            </div>
+                            <div>
+                                <dt class="font-medium text-gray-500">Memory</dt>
+                                <dd class="text-gray-900" x-text="formatBytes((instance.memory_mb || instance.stats?.memory_usage || 0) * 1024 * 1024)"></dd>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Uptime -->
+                    <div class="mb-4">
+                        <dt class="text-sm font-medium text-gray-500">Uptime</dt>
+                        <dd class="text-sm text-gray-900" x-text="instance.uptime || 'Unknown'"></dd>
+                    </div>
+                    
+                    <!-- Created Time -->
+                    <div class="mb-4" x-show="instance.created">
+                        <dt class="text-sm font-medium text-gray-500">Created</dt>
+                        <dd class="text-sm text-gray-900" x-text="formatDate(instance.created)"></dd>
+                    </div>
+                </div>
+                
+                <!-- Actions -->
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <div class="flex space-x-2">
+                            <!-- Start/Stop Toggle -->
+                            <button @click="toggleInstance(instance)"
+                                    :disabled="isOperating"
+                                    class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded"
+                                    :class="{
+                                        'text-white bg-green-600 hover:bg-green-700': instance.status === 'stopped',
+                                        'text-white bg-red-600 hover:bg-red-700': instance.status === 'running'
+                                    }">
+                                <i :class="{
+                                     'fas fa-play mr-1': instance.status === 'stopped',
+                                     'fas fa-stop mr-1': instance.status === 'running'
+                                   }"></i>
+                                <span x-text="instance.status === 'running' ? 'Stop' : 'Start'"></span>
+                            </button>
+                            
+                            <!-- Restart -->
+                            <button @click="restartInstance(instance)"
+                                    x-show="instance.status === 'running'"
+                                    :disabled="isOperating"
+                                    class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50">
+                                <i class="fas fa-redo mr-1"></i>
+                                Restart
+                            </button>
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                            <!-- Logs -->
+                            <button @click="viewLogs(instance)"
+                                    class="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50">
+                                <i class="fas fa-file-alt mr-1"></i>
+                                Logs
+                            </button>
+                            
+                            <!-- Delete -->
+                            <button @click="deleteInstance(instance)"
+                                    :disabled="isOperating"
+                                    class="inline-flex items-center px-3 py-1.5 border border-red-300 text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50">
+                                <i class="fas fa-trash mr-1"></i>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+    
+    <!-- Empty State -->
+    <div x-show="filteredInstances.length === 0 && !isLoading" class="text-center py-12">
+        <i class="fas fa-server text-gray-400 text-6xl mb-4"></i>
+        <h3 class="text-xl font-medium text-gray-900 mb-2">No instances found</h3>
+        <p class="text-gray-500 mb-6">
+            <span x-show="filterMode === 'all' && filterStatus === 'all'">
+                You haven't created any Nexus CLI instances yet.
+            </span>
+            <span x-show="filterMode !== 'all' || filterStatus !== 'all'">
+                No instances match your current filters.
+            </span>
+        </p>
+        <div class="space-x-4">
+            <a href="/create" 
+               class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                <i class="fas fa-plus mr-2"></i>
+                Create Your First Instance
+            </a>
+            <button @click="clearFilters()"
+                    x-show="filterMode !== 'all' || filterStatus !== 'all'"
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Clear Filters
+            </button>
+        </div>
+    </div>
+    
+    <!-- Loading State -->
+    <div x-show="isLoading" class="text-center py-12">
+        <div class="loading-spinner mx-auto mb-4"></div>
+        <p class="text-gray-500">Loading instances...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function instancesData() {
+    return {
+        instances: [],
+        filteredInstances: [],
+        filterMode: 'all',
+        filterStatus: 'all',
+        isLoading: false,
+        isRefreshing: false,
+        isOperating: false,
+        
+        init() {
+            this.loadInstances();
+            this.startAutoRefresh();
+            
+            // Listen for refresh events
+            window.addEventListener('refresh-data', () => {
+                this.loadInstances();
+            });
+        },
+        
+        async loadInstances() {
+            this.isLoading = true;
+            try {
+                const response = await fetch('/api/instances');
+                this.instances = await response.json();
+                this.filterInstances();
+            } catch (error) {
+                console.error('Failed to load instances:', error);
+            } finally {
+                this.isLoading = false;
+            }
+        },
+        
+        async refreshInstances() {
+            this.isRefreshing = true;
+            await this.loadInstances();
+            setTimeout(() => {
+                this.isRefreshing = false;
+            }, 1000);
+        },
+        
+        filterInstances() {
+            this.filteredInstances = this.instances.filter(instance => {
+                const modeMatch = this.filterMode === 'all' || instance.mode === this.filterMode;
+                const statusMatch = this.filterStatus === 'all' || instance.status === this.filterStatus;
+                return modeMatch && statusMatch;
+            });
+        },
+        
+        clearFilters() {
+            this.filterMode = 'all';
+            this.filterStatus = 'all';
+            this.filterInstances();
+        },
+        
+        async toggleInstance(instance) {
+            this.isOperating = true;
+            try {
+                const action = instance.status === 'running' ? 'stop' : 'start';
+                const response = await fetch(`/api/instances/${instance.node_id}/${action}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: instance.mode })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    await this.loadInstances();
+                } else {
+                    alert(`Failed to ${action} instance: ${result.error}`);
+                }
+            } catch (error) {
+                console.error(`Failed to toggle instance:`, error);
+                alert(`Failed to toggle instance: ${error.message}`);
+            } finally {
+                this.isOperating = false;
+            }
+        },
+        
+        async restartInstance(instance) {
+            this.isOperating = true;
+            try {
+                const response = await fetch(`/api/instances/${instance.node_id}/restart`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: instance.mode })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    await this.loadInstances();
+                } else {
+                    alert(`Failed to restart instance: ${result.error}`);
+                }
+            } catch (error) {
+                console.error('Failed to restart instance:', error);
+                alert(`Failed to restart instance: ${error.message}`);
+            } finally {
+                this.isOperating = false;
+            }
+        },
+        
+        async viewLogs(instance) {
+            try {
+                const response = await fetch(`/api/instances/${instance.node_id}/logs?mode=${instance.mode}`);
+                const logs = await response.text();
+                
+                // Open logs in a new window
+                const logWindow = window.open('', '_blank', 'width=1000,height=700');
+                logWindow.document.write(`
+                    <html>
+                        <head>
+                            <title>Logs - ${instance.node_id}</title>
+                            <style>
+                                body { 
+                                    font-family: 'Courier New', monospace; 
+                                    background: #1e1e1e; 
+                                    color: #fff; 
+                                    padding: 20px; 
+                                    margin: 0;
+                                }
+                                h2 { color: #4fc3f7; margin-top: 0; }
+                                pre { 
+                                    white-space: pre-wrap; 
+                                    word-wrap: break-word; 
+                                    line-height: 1.4;
+                                    background: #2d2d2d;
+                                    padding: 15px;
+                                    border-radius: 5px;
+                                    overflow-x: auto;
+                                }
+                                .refresh { 
+                                    position: fixed; 
+                                    top: 10px; 
+                                    right: 10px; 
+                                    background: #4fc3f7; 
+                                    color: white; 
+                                    border: none; 
+                                    padding: 10px 15px; 
+                                    border-radius: 5px; 
+                                    cursor: pointer;
+                                }
+                            </style>
+                        </head>
+                        <body>
+                            <button class="refresh" onclick="location.reload()">Refresh</button>
+                            <h2>Logs for ${instance.node_id} (${instance.mode})</h2>
+                            <pre>${logs}</pre>
+                            <script>
+                                // Auto-refresh every 10 seconds
+                                setTimeout(() => location.reload(), 10000);
+                            </script>
+                        </body>
+                    </html>
+                `);
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+                alert('Failed to load logs: ' + error.message);
+            }
+        },
+        
+        async deleteInstance(instance) {
+            const confirmMessage = `Are you sure you want to delete instance "${instance.node_id}"?\\n\\nThis action cannot be undone.`;
+            if (!confirm(confirmMessage)) return;
+            
+            this.isOperating = true;
+            try {
+                // First stop the instance if running
+                if (instance.status === 'running') {
+                    const stopResponse = await fetch(`/api/instances/${instance.node_id}/stop`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mode: instance.mode })
+                    });
+                    
+                    const stopResult = await stopResponse.json();
+                    if (!stopResult.success) {
+                        alert(`Failed to stop instance before deletion: ${stopResult.error}`);
+                        return;
+                    }
+                    
+                    // Wait a moment for cleanup
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+                
+                // Delete the instance
+                const response = await fetch(`/api/instances/${instance.node_id}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: instance.mode })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    await this.loadInstances();
+                } else {
+                    alert(`Failed to delete instance: ${result.error}`);
+                }
+            } catch (error) {
+                console.error('Failed to delete instance:', error);
+                alert(`Failed to delete instance: ${error.message}`);
+            } finally {
+                this.isOperating = false;
+            }
+        },
+        
+        startAutoRefresh() {
+            setInterval(() => {
+                if (!this.isOperating) {
+                    this.loadInstances();
+                }
+            }, 30000); // Refresh every 30 seconds
+        },
+        
+        formatDate(dateString) {
+            return new Date(dateString).toLocaleString();
+        }
+    }
+}
+</script>
+{% endblock %}

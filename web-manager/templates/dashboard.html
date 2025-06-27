@@ -1,159 +1,290 @@
 {% extends "base.html" %}
 
+{% block title %}Dashboard - Nexus CLI Manager{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
 {% block content %}
 <div x-data="dashboardData()" x-init="init()">
-    <!-- Header -->
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p class="mt-2 text-gray-600">Monitor and manage your Nexus CLI Docker deployments</p>
-    </div>
-
-    <!-- Metrics Cards -->
+    <!-- Quick Stats Overview -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <!-- Running Containers -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
+        <!-- Running Instances -->
+        <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
             <div class="p-5">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <i class="fas fa-play-circle text-green-400 text-2xl"></i>
+                        <div class="w-8 h-8 bg-green-100 rounded-md flex items-center justify-center">
+                            <i class="fas fa-play text-green-600"></i>
+                        </div>
                     </div>
                     <div class="ml-5 w-0 flex-1">
                         <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Running Containers</dt>
-                            <dd class="text-lg font-medium text-gray-900" x-text="runningContainers"></dd>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Running Instances</dt>
+                            <dd class="text-2xl font-bold text-gray-900" x-text="stats.running"></dd>
                         </dl>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Total Containers -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
-            <div class="p-5">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-cubes text-blue-400 text-2xl"></i>
-                    </div>
-                    <div class="ml-5 w-0 flex-1">
-                        <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">Total Containers</dt>
-                            <dd class="text-lg font-medium text-gray-900" x-text="totalContainers"></dd>
-                        </dl>
-                    </div>
+            <div class="bg-gray-50 px-5 py-3">
+                <div class="text-sm">
+                    <span class="text-green-600 font-medium" x-text="stats.native_running"></span>
+                    <span class="text-gray-500"> native, </span>
+                    <span class="text-blue-600 font-medium" x-text="stats.docker_running"></span>
+                    <span class="text-gray-500"> docker</span>
                 </div>
             </div>
         </div>
 
-        <!-- CPU Usage -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
+        <!-- Total Instances -->
+        <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
             <div class="p-5">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <i class="fas fa-microchip text-purple-400 text-2xl"></i>
+                        <div class="w-8 h-8 bg-blue-100 rounded-md flex items-center justify-center">
+                            <i class="fas fa-server text-blue-600"></i>
+                        </div>
                     </div>
                     <div class="ml-5 w-0 flex-1">
                         <dl>
-                            <dt class="text-sm font-medium text-gray-500 truncate">CPU Usage</dt>
-                            <dd class="text-lg font-medium text-gray-900" x-text="cpuUsage + '%'"></dd>
+                            <dt class="text-sm font-medium text-gray-500 truncate">Total Instances</dt>
+                            <dd class="text-2xl font-bold text-gray-900" x-text="stats.total"></dd>
                         </dl>
                     </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-5 py-3">
+                <div class="text-sm text-gray-500">
+                    Across all deployment modes
+                </div>
+            </div>
+        </div>
+
+        <!-- System CPU -->
+        <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
+            <div class="p-5">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <div class="w-8 h-8 bg-yellow-100 rounded-md flex items-center justify-center">
+                            <i class="fas fa-microchip text-yellow-600"></i>
+                        </div>
+                    </div>
+                    <div class="ml-5 w-0 flex-1">
+                        <dl>
+                            <dt class="text-sm font-medium text-gray-500 truncate">System CPU</dt>
+                            <dd class="text-2xl font-bold text-gray-900" x-text="systemMetrics.cpu_percent + '%'"></dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-5 py-3">
+                <div class="text-sm text-gray-500">
+                    Host system usage
                 </div>
             </div>
         </div>
 
         <!-- Memory Usage -->
-        <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
             <div class="p-5">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <i class="fas fa-memory text-orange-400 text-2xl"></i>
+                        <div class="w-8 h-8 bg-purple-100 rounded-md flex items-center justify-center">
+                            <i class="fas fa-memory text-purple-600"></i>
+                        </div>
                     </div>
                     <div class="ml-5 w-0 flex-1">
                         <dl>
                             <dt class="text-sm font-medium text-gray-500 truncate">Memory Usage</dt>
-                            <dd class="text-lg font-medium text-gray-900" x-text="memoryUsage + '%'"></dd>
+                            <dd class="text-2xl font-bold text-gray-900" x-text="systemMetrics.memory_percent + '%'"></dd>
                         </dl>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-50 px-5 py-3">
+                <div class="text-sm text-gray-500" x-text="formatBytes(systemMetrics.memory_used) + ' / ' + formatBytes(systemMetrics.memory_total)">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deployment Modes Overview -->
+    <div class="mb-8">
+        <h2 class="text-lg font-medium text-gray-900 mb-4">Available Deployment Modes</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <template x-for="mode in deploymentModes" :key="mode.id">
+                <div class="bg-white rounded-lg shadow border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                    <div class="flex items-center mb-4">
+                        <div class="w-10 h-10 rounded-lg flex items-center justify-center mr-3"
+                             :class="{
+                                 'bg-green-100': mode.color === 'green',
+                                 'bg-blue-100': mode.color === 'blue',
+                                 'bg-purple-100': mode.color === 'purple',
+                                 'bg-orange-100': mode.color === 'orange'
+                             }">
+                            <i :class="mode.icon + ' text-lg'" 
+                               :class="{
+                                   'text-green-600': mode.color === 'green',
+                                   'text-blue-600': mode.color === 'blue',
+                                   'text-purple-600': mode.color === 'purple',
+                                   'text-orange-600': mode.color === 'orange'
+                               }"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-medium text-gray-900" x-text="mode.name"></h3>
+                            <p class="text-sm text-gray-500" x-text="mode.description"></p>
+                        </div>
+                    </div>
+                    <ul class="space-y-1 mb-4">
+                        <template x-for="feature in mode.features" :key="feature">
+                            <li class="text-sm text-gray-600 flex items-center">
+                                <i class="fas fa-check text-green-500 mr-2 text-xs"></i>
+                                <span x-text="feature"></span>
+                            </li>
+                        </template>
+                    </ul>
+                    <a :href="'/create?mode=' + mode.id" 
+                       class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white transition-colors"
+                       :class="{
+                           'bg-green-600 hover:bg-green-700': mode.color === 'green',
+                           'bg-blue-600 hover:bg-blue-700': mode.color === 'blue',
+                           'bg-purple-600 hover:bg-purple-700': mode.color === 'purple',
+                           'bg-orange-600 hover:bg-orange-700': mode.color === 'orange'
+                       }">
+                        <i class="fas fa-plus mr-2"></i>
+                        Create Instance
+                    </a>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Recent Instances -->
+    <div class="mb-8">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-medium text-gray-900">Recent Instances</h2>
+            <a href="/instances" class="text-sm text-blue-600 hover:text-blue-500">View all →</a>
+        </div>
+        
+        <div class="bg-white shadow rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <div class="overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instance</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mode</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resources</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uptime</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <template x-for="instance in recentInstances" :key="instance.node_id">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="w-8 h-8 rounded-full flex items-center justify-center mr-3"
+                                                     :class="{
+                                                         'bg-blue-100': instance.mode === 'native',
+                                                         'bg-purple-100': instance.mode === 'docker',
+                                                         'bg-orange-100': instance.mode === 'compose'
+                                                     }">
+                                                    <i :class="{
+                                                         'fas fa-desktop text-blue-600': instance.mode === 'native',
+                                                         'fab fa-docker text-purple-600': instance.mode === 'docker',
+                                                         'fas fa-cubes text-orange-600': instance.mode === 'compose'
+                                                       }"></i>
+                                                </div>
+                                                <div>
+                                                    <div class="text-sm font-medium text-gray-900" x-text="instance.node_id"></div>
+                                                    <div class="text-sm text-gray-500" x-text="instance.container_name || 'Native Process'"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+                                                  :class="{
+                                                      'bg-blue-100 text-blue-800 border-blue-200': instance.mode === 'native',
+                                                      'bg-purple-100 text-purple-800 border-purple-200': instance.mode === 'docker',
+                                                      'bg-orange-100 text-orange-800 border-orange-200': instance.mode === 'compose'
+                                                  }" x-text="instance.mode"></span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border"
+                                                  :class="{
+                                                      'bg-green-100 text-green-800 border-green-200': instance.status === 'running',
+                                                      'bg-red-100 text-red-800 border-red-200': instance.status === 'stopped',
+                                                      'bg-yellow-100 text-yellow-800 border-yellow-200': instance.status === 'paused'
+                                                  }" x-text="instance.status"></span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <div x-show="instance.cpu_percent !== undefined">
+                                                CPU: <span x-text="instance.cpu_percent + '%'"></span><br>
+                                                RAM: <span x-text="formatBytes(instance.memory_mb * 1024 * 1024)"></span>
+                                            </div>
+                                            <div x-show="instance.cpu_percent === undefined" class="text-gray-400">
+                                                N/A
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <span x-text="instance.uptime || 'Unknown'"></span>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div class="flex space-x-2">
+                                                <button @click="viewLogs(instance.node_id, instance.mode)"
+                                                        class="text-blue-600 hover:text-blue-900 p-1 rounded"
+                                                        title="View Logs">
+                                                    <i class="fas fa-file-alt"></i>
+                                                </button>
+                                                <button @click="stopInstance(instance.node_id, instance.mode)"
+                                                        x-show="instance.status === 'running'"
+                                                        class="text-red-600 hover:text-red-900 p-1 rounded"
+                                                        title="Stop Instance">
+                                                    <i class="fas fa-stop"></i>
+                                                </button>
+                                                <button @click="startInstance(instance.node_id, instance.mode)"
+                                                        x-show="instance.status === 'stopped'"
+                                                        class="text-green-600 hover:text-green-900 p-1 rounded"
+                                                        title="Start Instance">
+                                                    <i class="fas fa-play"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                        
+                        <!-- Empty state -->
+                        <div x-show="recentInstances.length === 0" class="text-center py-12">
+                            <i class="fas fa-server text-gray-400 text-4xl mb-4"></i>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">No instances running</h3>
+                            <p class="text-gray-500 mb-4">Get started by creating your first Nexus CLI instance</p>
+                            <a href="/create" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                                <i class="fas fa-plus mr-2"></i>
+                                Create Instance
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="bg-white shadow rounded-lg mb-8">
-        <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Quick Actions</h3>
-            <div class="flex flex-wrap gap-3">
-                <button @click="deployService('single')" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    <i class="fas fa-rocket mr-2"></i>
-                    Deploy Single Instance
-                </button>
-                <button @click="deployService('multi')" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
-                    <i class="fas fa-layer-group mr-2"></i>
-                    Deploy Multi-Instance
-                </button>
-                <button @click="stopAllServices()" 
-                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
-                    <i class="fas fa-stop mr-2"></i>
-                    Stop All Services
-                </button>
-                <button @click="refreshData()" 
-                        class="inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    <i class="fas fa-sync mr-2"></i>
-                    Refresh
-                </button>
+    <!-- System Metrics Chart -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white shadow rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">CPU Usage</h3>
+                <canvas id="cpuChart" width="400" height="200"></canvas>
             </div>
         </div>
-    </div>
-
-    <!-- Containers Grid -->
-    <div class="bg-white shadow rounded-lg">
-        <div class="px-4 py-5 sm:p-6">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Containers</h3>
-            <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6" x-show="containers.length > 0">
-                <template x-for="container in containers" :key="container.id">
-                    <div class="border border-gray-200 rounded-lg p-4">
-                        <div class="flex items-center justify-between mb-3">
-                            <h4 class="text-sm font-medium text-gray-900" x-text="container.name"></h4>
-                            <span :class="getStatusClass(container.status)" 
-                                  class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
-                                  x-text="container.status"></span>
-                        </div>
-                        
-                        <div class="text-sm text-gray-500 mb-3">
-                            <p><strong>Image:</strong> <span x-text="container.image"></span></p>
-                            <p><strong>ID:</strong> <span x-text="container.id"></span></p>
-                        </div>
-
-                        <div class="flex space-x-2">
-                            <button @click="containerAction(container.name, 'start')" 
-                                    :disabled="container.status === 'running'"
-                                    class="flex-1 inline-flex justify-center items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                                <i class="fas fa-play mr-1"></i>
-                                Start
-                            </button>
-                            <button @click="containerAction(container.name, 'stop')" 
-                                    :disabled="container.status !== 'running'"
-                                    class="flex-1 inline-flex justify-center items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                                <i class="fas fa-stop mr-1"></i>
-                                Stop
-                            </button>
-                            <button @click="containerAction(container.name, 'restart')" 
-                                    class="flex-1 inline-flex justify-center items-center px-3 py-1 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50">
-                                <i class="fas fa-redo mr-1"></i>
-                                Restart
-                            </button>
-                        </div>
-                    </div>
-                </template>
-            </div>
-            
-            <div x-show="containers.length === 0" class="text-center py-12">
-                <i class="fas fa-cube text-gray-400 text-6xl mb-4"></i>
-                <h3 class="text-lg font-medium text-gray-900 mb-2">No containers found</h3>
-                <p class="text-gray-500">Deploy your first Nexus CLI instance to get started.</p>
+        
+        <div class="bg-white shadow rounded-lg border border-gray-200">
+            <div class="px-4 py-5 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Memory Usage</h3>
+                <canvas id="memoryChart" width="400" height="200"></canvas>
             </div>
         </div>
     </div>
@@ -164,110 +295,218 @@
 <script>
 function dashboardData() {
     return {
-        containers: [],
-        metrics: {},
-        runningContainers: 0,
-        totalContainers: 0,
-        cpuUsage: 0,
-        memoryUsage: 0,
+        stats: {
+            running: 0,
+            total: 0,
+            native_running: 0,
+            docker_running: 0
+        },
+        systemMetrics: {
+            cpu_percent: 0,
+            memory_percent: 0,
+            memory_used: 0,
+            memory_total: 0
+        },
+        deploymentModes: [],
+        recentInstances: [],
+        cpuChart: null,
+        memoryChart: null,
         
         init() {
-            this.refreshData();
-            // Make refreshData available globally
-            window.refreshData = () => this.refreshData();
+            this.loadData();
+            this.initCharts();
+            this.startAutoRefresh();
+            
+            // Listen for refresh events
+            window.addEventListener('refresh-data', () => {
+                this.loadData();
+            });
         },
         
-        async refreshData() {
+        async loadData() {
             try {
-                // Fetch containers
-                const containersResponse = await apiCall('/api/containers');
-                this.containers = containersResponse;
-                this.updateContainerStats();
+                // Load deployment modes
+                const modesResponse = await fetch('/api/deployment-modes');
+                this.deploymentModes = await modesResponse.json();
                 
-                // Fetch metrics
-                const metricsResponse = await apiCall('/api/metrics');
-                this.metrics = metricsResponse;
-                this.updateSystemStats();
+                // Load instances
+                const instancesResponse = await fetch('/api/instances');
+                const instances = await instancesResponse.json();
+                this.recentInstances = instances.slice(0, 5); // Show only recent 5
+                
+                // Calculate stats
+                this.calculateStats(instances);
+                
+                // Load system metrics
+                const metricsResponse = await fetch('/api/system-metrics');
+                this.systemMetrics = await metricsResponse.json();
+                
+                // Update charts
+                this.updateCharts();
+                
             } catch (error) {
-                console.error('Failed to refresh data:', error);
+                console.error('Failed to load dashboard data:', error);
+                this.$store.app.showNotification('error', 'Error', 'Failed to load dashboard data');
             }
         },
         
-        updateContainerStats() {
-            this.totalContainers = this.containers.length;
-            this.runningContainers = this.containers.filter(c => c.status === 'running').length;
+        calculateStats(instances) {
+            this.stats.total = instances.length;
+            this.stats.running = instances.filter(i => i.status === 'running').length;
+            this.stats.native_running = instances.filter(i => i.mode === 'native' && i.status === 'running').length;
+            this.stats.docker_running = instances.filter(i => i.mode === 'docker' && i.status === 'running').length;
         },
         
-        updateSystemStats() {
-            this.cpuUsage = Math.round(this.metrics.cpu_percent || 0);
-            if (this.metrics.memory) {
-                this.memoryUsage = Math.round(this.metrics.memory.percent || 0);
-            }
-        },
-        
-        getStatusClass(status) {
-            const classes = {
-                'running': 'bg-green-100 text-green-800',
-                'exited': 'bg-red-100 text-red-800',
-                'stopped': 'bg-red-100 text-red-800',
-                'restarting': 'bg-yellow-100 text-yellow-800'
-            };
-            return classes[status] || 'bg-gray-100 text-gray-800';
-        },
-        
-        async containerAction(containerName, action) {
-            try {
-                const response = await apiCall(`/api/container/${containerName}/${action}`, {
-                    method: 'POST'
-                });
-                
-                if (response.success) {
-                    showToast(response.message || `Container ${action} successful`, 'success');
-                    await this.refreshData();
-                } else {
-                    showToast(response.error || `Container ${action} failed`, 'error');
+        initCharts() {
+            // CPU Chart
+            const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+            this.cpuChart = new Chart(cpuCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'CPU Usage (%)',
+                        data: [],
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
                 }
-            } catch (error) {
-                showToast(`Container ${action} failed: ${error.message}`, 'error');
-            }
-        },
-        
-        async deployService(type) {
-            try {
-                const response = await apiCall('/api/deploy', {
-                    method: 'POST',
-                    body: JSON.stringify({ type })
-                });
-                
-                if (response.success) {
-                    showToast(response.message || `Service deployed successfully`, 'success');
-                    await this.refreshData();
-                } else {
-                    showToast(response.error || `Deployment failed`, 'error');
+            });
+            
+            // Memory Chart
+            const memoryCtx = document.getElementById('memoryChart').getContext('2d');
+            this.memoryChart = new Chart(memoryCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Memory Usage (%)',
+                        data: [],
+                        borderColor: 'rgb(139, 92, 246)',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
                 }
-            } catch (error) {
-                showToast(`Deployment failed: ${error.message}`, 'error');
-            }
+            });
         },
         
-        async stopAllServices() {
-            if (!confirm('Are you sure you want to stop all services?')) {
-                return;
+        updateCharts() {
+            const now = new Date().toLocaleTimeString();
+            
+            // Update CPU chart
+            this.cpuChart.data.labels.push(now);
+            this.cpuChart.data.datasets[0].data.push(this.systemMetrics.cpu_percent);
+            
+            // Keep only last 20 data points
+            if (this.cpuChart.data.labels.length > 20) {
+                this.cpuChart.data.labels.shift();
+                this.cpuChart.data.datasets[0].data.shift();
             }
             
+            this.cpuChart.update();
+            
+            // Update Memory chart
+            this.memoryChart.data.labels.push(now);
+            this.memoryChart.data.datasets[0].data.push(this.systemMetrics.memory_percent);
+            
+            if (this.memoryChart.data.labels.length > 20) {
+                this.memoryChart.data.labels.shift();
+                this.memoryChart.data.datasets[0].data.shift();
+            }
+            
+            this.memoryChart.update();
+        },
+        
+        startAutoRefresh() {
+            setInterval(() => {
+                this.loadData();
+            }, 30000); // Refresh every 30 seconds
+        },
+        
+        async viewLogs(nodeId, mode) {
             try {
-                const response = await apiCall('/api/stop-all', {
-                    method: 'POST'
+                const response = await fetch(`/api/instances/${nodeId}/logs?mode=${mode}`);
+                const logs = await response.text();
+                
+                // Open logs in a modal or new window
+                const logWindow = window.open('', '_blank', 'width=800,height=600');
+                logWindow.document.write(`
+                    <html>
+                        <head><title>Logs - ${nodeId}</title></head>
+                        <body style="font-family: monospace; background: #1e1e1e; color: #fff; padding: 20px;">
+                            <h2 style="color: #4fc3f7;">Logs for ${nodeId} (${mode})</h2>
+                            <pre style="white-space: pre-wrap; word-wrap: break-word;">${logs}</pre>
+                        </body>
+                    </html>
+                `);
+            } catch (error) {
+                console.error('Failed to load logs:', error);
+                this.$store.app.showNotification('error', 'Error', 'Failed to load logs');
+            }
+        },
+        
+        async stopInstance(nodeId, mode) {
+            if (!confirm(`Stop instance ${nodeId}?`)) return;
+            
+            try {
+                const response = await fetch(`/api/instances/${nodeId}/stop`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: mode })
                 });
                 
-                if (response.success) {
-                    showToast(response.message || `All services stopped`, 'success');
-                    await this.refreshData();
+                const result = await response.json();
+                if (result.success) {
+                    this.$store.app.showNotification('success', 'Success', `Instance ${nodeId} stopped`);
+                    this.loadData();
                 } else {
-                    showToast(response.error || `Stop all failed`, 'error');
+                    this.$store.app.showNotification('error', 'Error', result.error);
                 }
             } catch (error) {
-                showToast(`Stop all failed: ${error.message}`, 'error');
+                console.error('Failed to stop instance:', error);
+                this.$store.app.showNotification('error', 'Error', 'Failed to stop instance');
+            }
+        },
+        
+        async startInstance(nodeId, mode) {
+            try {
+                const response = await fetch(`/api/instances/${nodeId}/start`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode: mode })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    this.$store.app.showNotification('success', 'Success', `Instance ${nodeId} started`);
+                    this.loadData();
+                } else {
+                    this.$store.app.showNotification('error', 'Error', result.error);
+                }
+            } catch (error) {
+                console.error('Failed to start instance:', error);
+                this.$store.app.showNotification('error', 'Error', 'Failed to start instance');
             }
         }
     }

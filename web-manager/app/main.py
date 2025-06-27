@@ -1,31 +1,271 @@
 import os
 import json
 import subprocess
-import docker
-from docker.errors import NotFound, APIError
-from flask import Flask, render_template, request, jsonify, flash, redirect, url_for
+import shutil
+import platform
+import signal
+import threading
+import time
+from pathlib import Path
 from datetime import datetime
+from typing import List, Dict, Any, Optional
 import psutil
 import yaml
-from typing import List, Dict, Any
+
+from flask import Flask, render_template, request, jsonify, flash, redirect, url_for, session
+from flask_socketio import SocketIO, emit
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# Conditional Docker import for standalone mode
+try:
+    import docker
+    from docker.errors import NotFound, APIError
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
 
 app = Flask(__name__, 
            template_folder='../templates',
            static_folder='../static')
 app.secret_key = os.environ.get('SECRET_KEY', 'nexus-docker-manager-secret-key')
 
-# Docker client
-docker_client = docker.from_env()
+# WebSocket support for real-time updates
+socketio = SocketIO(app, cors_allowed_origins="*")
 
-class NexusDockerManager:
+# Docker client (if available)
+docker_client = None
+if DOCKER_AVAILABLE:
+    try:
+        docker_client = docker.from_env()
+    except Exception:
+        DOCKER_AVAILABLE = False
+
+class NexusManager:
+    """Enhanced Nexus CLI Manager supporting multiple deployment modes"""
+    
     def __init__(self):
         self.compose_project = os.environ.get('COMPOSE_PROJECT_NAME', 'nexus-docker')
-        self.compose_dir = '/app/compose'
+        self.compose_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'compose')
+        self.docker_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'docker')
         self.nexus_image = 'nexus-cli:latest'
         self.network_name = 'nexus-network'
         
+        # Native process tracking
+        self.native_processes = {}
+        self.native_process_lock = threading.Lock()
+        
+        # Determine deployment capabilities
+        self.capabilities = self._detect_capabilities()
+        
+    def _detect_capabilities(self) -> Dict[str, bool]:
+        """Detect what deployment modes are available"""
+        capabilities = {
+            'native': self._check_native_nexus(),
+            'docker': DOCKER_AVAILABLE and self._check_docker_access(),
+            'compose': self._check_compose_available()
+        }
+        return capabilities
+    
+    def _check_native_nexus(self) -> bool:
+        """Check if Nexus CLI is available natively on the host"""
+        try:
+            result = subprocess.run(['nexus', '--version'], 
+                                  capture_output=True, text=True, timeout=5)
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+    
+    def _check_docker_access(self) -> bool:
+        """Check if Docker is accessible"""
+        if not docker_client:
+            return False
+        try:
+            docker_client.ping()
+            return True
+        except Exception:
+            return False
+    
+    def _check_compose_available(self) -> bool:
+        """Check if Docker Compose is available"""
+        try:
+            result = subprocess.run(['docker-compose', '--version'], 
+                                  capture_output=True, text=True, timeout=5)
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            try:
+                result = subprocess.run(['docker', 'compose', 'version'], 
+                                      capture_output=True, text=True, timeout=5)
+                return result.returncode == 0
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                return False
+    
+    def get_deployment_modes(self) -> List[Dict[str, Any]]:
+        """Get available deployment modes with descriptions"""
+        modes = []
+        
+        if self.capabilities['native']:
+            modes.append({
+                'id': 'native',
+                'name': 'Native Host',
+                'description': 'Run Nexus CLI directly on the host system',
+                'icon': 'fas fa-desktop',
+                'color': 'green',
+                'features': ['Direct host access', 'Minimal overhead', 'Easy debugging']
+            })
+        
+        if self.capabilities['docker']:
+            modes.append({
+                'id': 'docker-single',
+                'name': 'Single Docker Container',
+                'description': 'One Nexus instance per container',
+                'icon': 'fab fa-docker',
+                'color': 'blue',
+                'features': ['Isolated instances', 'Resource control', 'Easy scaling']
+            })
+            
+            modes.append({
+                'id': 'docker-multi',
+                'name': 'Multi-Instance Container',
+                'description': 'Multiple Nexus instances in one container',
+                'icon': 'fas fa-layer-group',
+                'color': 'purple',
+                'features': ['Resource sharing', 'Centralized logging', 'Efficient deployment']
+            })
+        
+        if self.capabilities['compose']:
+            modes.append({
+                'id': 'compose',
+                'name': 'Docker Compose Stack',
+                'description': 'Orchestrated multi-container deployment',
+                'icon': 'fas fa-cubes',
+                'color': 'orange',
+                'features': ['Service orchestration', 'Network isolation', 'Volume management']
+            })
+        
+        return modes
+        
+    # Native Process Management Methods
+    def start_native_instance(self, node_id: str, threads: int = 4, 
+                            additional_args: List[str] = None) -> Dict[str, Any]:
+        """Start a native Nexus CLI instance on the host"""
+        if not self.capabilities['native']:
+            return {"success": False, "error": "Native Nexus CLI not available"}
+        
+        with self.native_process_lock:
+            if node_id in self.native_processes:
+                return {"success": False, "error": f"Instance {node_id} already running"}
+            
+            try:
+                # Prepare command
+                cmd = ['nexus', 'start']
+                if threads:
+                    cmd.extend(['--threads', str(threads)])
+                if additional_args:
+                    cmd.extend(additional_args)
+                
+                # Start process
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True
+                )
+                
+                # Store process info
+                self.native_processes[node_id] = {
+                    'process': process,
+                    'pid': process.pid,
+                    'start_time': datetime.now(),
+                    'threads': threads,
+                    'status': 'running'
+                }
+                
+                return {
+                    "success": True,
+                    "node_id": node_id,
+                    "pid": process.pid,
+                    "mode": "native"
+                }
+                
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+    
+    def stop_native_instance(self, node_id: str) -> Dict[str, Any]:
+        """Stop a native Nexus CLI instance"""
+        with self.native_process_lock:
+            if node_id not in self.native_processes:
+                return {"success": False, "error": f"Instance {node_id} not found"}
+            
+            try:
+                process_info = self.native_processes[node_id]
+                process = process_info['process']
+                
+                # Graceful shutdown
+                if platform.system() == "Windows":
+                    process.terminate()
+                else:
+                    process.send_signal(signal.SIGTERM)
+                
+                # Wait for graceful shutdown
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                
+                del self.native_processes[node_id]
+                
+                return {"success": True, "node_id": node_id}
+                
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+    
+    def get_native_instances(self) -> List[Dict[str, Any]]:
+        """Get status of all native instances"""
+        instances = []
+        
+        with self.native_process_lock:
+            for node_id, info in list(self.native_processes.items()):
+                process = info['process']
+                
+                # Check if process is still running
+                if process.poll() is not None:
+                    # Process has terminated
+                    info['status'] = 'stopped'
+                    del self.native_processes[node_id]
+                    continue
+                
+                try:
+                    # Get process stats using psutil
+                    ps_process = psutil.Process(info['pid'])
+                    cpu_percent = ps_process.cpu_percent()
+                    memory_info = ps_process.memory_info()
+                    
+                    instances.append({
+                        'node_id': node_id,
+                        'mode': 'native',
+                        'pid': info['pid'],
+                        'status': info['status'],
+                        'start_time': info['start_time'].isoformat(),
+                        'threads': info['threads'],
+                        'cpu_percent': cpu_percent,
+                        'memory_mb': memory_info.rss / 1024 / 1024,
+                        'uptime': str(datetime.now() - info['start_time'])
+                    })
+                    
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    # Process no longer exists
+                    del self.native_processes[node_id]
+        
+        return instances
+
+    # Docker Management Methods (Enhanced)
     def ensure_network(self):
         """Ensure the Nexus network exists"""
+        if not docker_client:
+            return
         try:
             docker_client.networks.get(self.network_name)
         except NotFound:
@@ -408,15 +648,104 @@ class NexusDockerManager:
             app.logger.error(f"Scaling failed: {str(e)}")
             return {'success': False, 'error': str(e)}
 
+    # Unified Instance Management
+    def get_all_instances(self) -> List[Dict[str, Any]]:
+        """Get all instances across all deployment modes"""
+        instances = []
+        
+        # Add native instances
+        instances.extend(self.get_native_instances())
+        
+        # Add Docker container instances
+        if DOCKER_AVAILABLE and docker_client:
+            try:
+                containers = self.get_containers()
+                for container in containers:
+                    instances.append({
+                        'node_id': container.get('labels', {}).get('nexus.node-id', container['name']),
+                        'mode': 'docker',
+                        'container_id': container['id'],
+                        'container_name': container['name'],
+                        'status': container['status'],
+                        'created': container['created'],
+                        'image': container['image'],
+                        'stats': container.get('stats'),
+                        'ports': container['ports']
+                    })
+            except Exception as e:
+                app.logger.error(f"Failed to get Docker instances: {str(e)}")
+        
+        return instances
+    
+    def start_instance(self, mode: str, node_id: str, **kwargs) -> Dict[str, Any]:
+        """Start an instance using the specified mode"""
+        if mode == 'native':
+            return self.start_native_instance(node_id, **kwargs)
+        elif mode == 'docker-single':
+            return self.create_single_node_container(node_id, **kwargs)
+        elif mode == 'docker-multi':
+            node_ids = kwargs.get('node_ids', [node_id])
+            return self.create_multi_node_container(node_ids, **kwargs)
+        else:
+            return {"success": False, "error": f"Unsupported mode: {mode}"}
+    
+    def stop_instance(self, mode: str, instance_id: str) -> Dict[str, Any]:
+        """Stop an instance"""
+        if mode == 'native':
+            return self.stop_native_instance(instance_id)
+        elif mode.startswith('docker'):
+            return self.container_action(instance_id, 'stop')
+        else:
+            return {"success": False, "error": f"Unsupported mode: {mode}"}
+    
+    def get_instance_logs(self, mode: str, instance_id: str, tail: int = 100) -> str:
+        """Get logs for an instance"""
+        if mode == 'native':
+            # For native instances, try to read from log files
+            return f"Native instance {instance_id} logs (file-based logging not implemented yet)"
+        elif mode.startswith('docker'):
+            return self.get_logs(instance_id, tail)
+        else:
+            return f"Unsupported mode: {mode}"
+    
+    def build_nexus_image(self) -> Dict[str, Any]:
+        """Build the Nexus CLI Docker image"""
+        if not DOCKER_AVAILABLE:
+            return {"success": False, "error": "Docker not available"}
+        
+        try:
+            # Build the image
+            image, logs = docker_client.images.build(
+                path=self.docker_dir,
+                tag=self.nexus_image,
+                rm=True,
+                pull=True
+            )
+            
+            # Collect build logs
+            build_log = ""
+            for log in logs:
+                if 'stream' in log:
+                    build_log += log['stream']
+            
+            return {
+                "success": True,
+                "image_id": image.short_id,
+                "image_tags": image.tags,
+                "build_log": build_log
+            }
+            
+        except Exception as e:
+            app.logger.error(f"Failed to build image: {str(e)}")
+            return {"success": False, "error": str(e)}
+
 # Initialize manager
-nexus_manager = NexusDockerManager()
+nexus_manager = NexusManager()
 
 @app.route('/')
 def index():
     """Main dashboard"""
-    containers = nexus_manager.get_containers()
-    metrics = nexus_manager.get_system_metrics()
-    return render_template('dashboard.html', containers=containers, metrics=metrics)
+    return render_template('dashboard.html')
 
 @app.route('/api/containers')
 def api_containers():
@@ -535,6 +864,21 @@ def nodes_page():
         flash(f'Error loading nodes page: {str(e)}', 'error')
         return redirect(url_for('index'))
 
+@app.route('/create')
+def create_instance():
+    """Create instance page"""
+    return render_template('create.html')
+
+@app.route('/instances')
+def instances_page():
+    """Instances management page"""
+    return render_template('instances.html')
+
+@app.route('/settings')
+def settings_page():
+    """Settings page"""
+    return render_template('settings.html')
+
 @app.errorhandler(404)
 def not_found(error):
     return render_template('error.html', error='Page not found'), 404
@@ -643,6 +987,163 @@ def api_container_info(container_name):
 def create_page():
     """Container creation page"""
     return render_template('create.html')
+
+# API Routes for the new enhanced interface
+
+@app.route('/api/capabilities')
+def api_capabilities():
+    """Get system capabilities"""
+    return jsonify(nexus_manager.capabilities)
+
+@app.route('/api/deployment-modes')
+def api_deployment_modes():
+    """Get available deployment modes"""
+    return jsonify(nexus_manager.get_deployment_modes())
+
+@app.route('/api/instances')
+def api_instances():
+    """Get all instances"""
+    return jsonify(nexus_manager.get_all_instances())
+
+@app.route('/api/instances/<instance_id>/logs')
+def api_instance_logs(instance_id):
+    """Get logs for a specific instance"""
+    mode = request.args.get('mode', 'docker')
+    tail = int(request.args.get('tail', 100))
+    logs = nexus_manager.get_instance_logs(mode, instance_id, tail)
+    return logs, 200, {'Content-Type': 'text/plain'}
+
+@app.route('/api/instances/<instance_id>/start', methods=['POST'])
+def api_start_instance(instance_id):
+    """Start an instance"""
+    data = request.get_json()
+    mode = data.get('mode', 'docker')
+    
+    if mode == 'native':
+        result = nexus_manager.start_native_instance(instance_id)
+    elif mode.startswith('docker'):
+        result = nexus_manager.container_action(instance_id, 'start')
+    else:
+        result = {"success": False, "error": f"Unsupported mode: {mode}"}
+    
+    return jsonify(result)
+
+@app.route('/api/instances/<instance_id>/stop', methods=['POST'])
+def api_stop_instance(instance_id):
+    """Stop an instance"""
+    data = request.get_json()
+    mode = data.get('mode', 'docker')
+    
+    result = nexus_manager.stop_instance(mode, instance_id)
+    return jsonify(result)
+
+@app.route('/api/instances/<instance_id>/restart', methods=['POST'])
+def api_restart_instance(instance_id):
+    """Restart an instance"""
+    data = request.get_json()
+    mode = data.get('mode', 'docker')
+    
+    # Stop then start
+    stop_result = nexus_manager.stop_instance(mode, instance_id)
+    if stop_result['success']:
+        # Wait a moment
+        time.sleep(2)
+        start_result = nexus_manager.start_instance(mode, instance_id)
+        return jsonify(start_result)
+    else:
+        return jsonify(stop_result)
+
+@app.route('/api/instances', methods=['POST'])
+def api_create_instance():
+    """Create a new instance"""
+    data = request.get_json()
+    mode = data.get('mode')
+    node_id = data.get('node_id')
+    
+    if not mode or not node_id:
+        return jsonify({"success": False, "error": "Mode and node_id are required"}), 400
+    
+    # Extract additional parameters
+    kwargs = {k: v for k, v in data.items() if k not in ['mode', 'node_id']}
+    
+    result = nexus_manager.start_instance(mode, node_id, **kwargs)
+    return jsonify(result)
+
+@app.route('/api/system-metrics')
+def api_system_metrics():
+    """Get current system metrics"""
+    metrics = nexus_manager.get_system_metrics()
+    
+    # Add calculated fields for frontend
+    if 'memory' in metrics:
+        metrics['memory_percent'] = round((metrics['memory']['used'] / metrics['memory']['total']) * 100, 1)
+        metrics['memory_used'] = metrics['memory']['used']
+        metrics['memory_total'] = metrics['memory']['total']
+    
+    return jsonify(metrics)
+
+@app.route('/api/build-image', methods=['POST'])
+def api_build_image():
+    """Build the Nexus CLI Docker image"""
+    result = nexus_manager.build_nexus_image()
+    return jsonify(result)
+
+@app.route('/api/health')
+def api_health():
+    """Health check endpoint"""
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "capabilities": nexus_manager.capabilities
+    })
+
+# WebSocket events for real-time updates
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    emit('connected', {'message': 'Connected to Nexus Manager'})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    print('Client disconnected')
+
+@socketio.on('request_update')
+def handle_request_update():
+    """Handle request for data update"""
+    try:
+        instances = nexus_manager.get_all_instances()
+        metrics = nexus_manager.get_system_metrics()
+        
+        emit('data_update', {
+            'instances': instances,
+            'metrics': metrics,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        emit('error', {'message': str(e)})
+
+# Background task for periodic updates
+def background_thread():
+    """Send periodic updates to connected clients"""
+    while True:
+        socketio.sleep(30)  # Update every 30 seconds
+        try:
+            instances = nexus_manager.get_all_instances()
+            metrics = nexus_manager.get_system_metrics()
+            
+            socketio.emit('data_update', {
+                'instances': instances,
+                'metrics': metrics,
+                'timestamp': datetime.now().isoformat()
+            })
+        except Exception as e:
+            app.logger.error(f"Background update failed: {str(e)}")
+
+# Start background thread
+background_update_thread = threading.Thread(target=background_thread)
+background_update_thread.daemon = True
+background_update_thread.start()
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
