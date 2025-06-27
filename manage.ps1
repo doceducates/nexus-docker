@@ -19,7 +19,10 @@ param(
     [switch]$Build,
     
     [Parameter()]
-    [switch]$Upgrade
+    [switch]$Upgrade,
+    
+    [Parameter()]
+    [switch]$Background
 )
 
 $ProjectRoot = $PSScriptRoot
@@ -27,10 +30,25 @@ $WebManagerDir = Join-Path $ProjectRoot "web-manager"
 $SetupScript = Join-Path $ProjectRoot "setup.py"
 
 # Simple color functions
-function Write-Success { param($Message) Write-Host "✓ $Message" -ForegroundColor Green }
-function Write-Error { param($Message) Write-Host "✗ $Message" -ForegroundColor Red }
-function Write-Warning { param($Message) Write-Host "⚠ $Message" -ForegroundColor Yellow }
-function Write-Info { param($Message) Write-Host "ℹ $Message" -ForegroundColor Cyan }
+function Write-Success { 
+    param([string]$Message) 
+    Write-Host "✓ $Message" -ForegroundColor Green 
+}
+
+function Write-Error { 
+    param([string]$Message) 
+    Write-Host "✗ $Message" -ForegroundColor Red 
+}
+
+function Write-Warning { 
+    param([string]$Message) 
+    Write-Host "⚠ $Message" -ForegroundColor Yellow 
+}
+
+function Write-Info { 
+    param([string]$Message) 
+    Write-Host "ℹ $Message" -ForegroundColor Cyan 
+}
 
 function Show-Header {
     Write-Host "=======================================================" -ForegroundColor Cyan
@@ -56,11 +74,11 @@ function Show-Help {
     Write-Host "  help        Show this help message" -ForegroundColor White
     Write-Host ""
     Write-Host "OPTIONS:" -ForegroundColor Green
-    Write-Host "  -DebugMode  Enable debug mode" -ForegroundColor White
-    Write-Host "  -Port       Port to use (default: 5000)" -ForegroundColor White
+    Write-Host "  -DebugMode    Enable debug mode" -ForegroundColor White
+    Write-Host "  -Port         Port to use (default: 5000)" -ForegroundColor White
     Write-Host "  -HostAddress  Host to bind to (default: 127.0.0.1)" -ForegroundColor White
-    Write-Host "  -Build      Build Docker images during setup" -ForegroundColor White
-    Write-Host "  -Upgrade    Upgrade dependencies during setup" -ForegroundColor White
+    Write-Host "  -Build        Build Docker images during setup" -ForegroundColor White
+    Write-Host "  -Upgrade      Upgrade dependencies during setup" -ForegroundColor White
     Write-Host ""
     Write-Host "EXAMPLES:" -ForegroundColor Green
     Write-Host "  .\manage.ps1 setup                        # Initial setup" -ForegroundColor Cyan
@@ -95,189 +113,102 @@ function Test-Python {
     return $false
 }
 
-function Run-Setup {
+function Invoke-Setup {
     Write-Info "Running Python setup script..."
     
-    $args = @()
-    if ($Build) { $args += "--build-images" }
-    if ($Upgrade) { $args += "--upgrade" }
+    $setupArgs = @()
+    if ($Build) { $setupArgs += "--build" }
+    if ($Upgrade) { $setupArgs += "--upgrade" }
+    if ($DebugMode) { $setupArgs += "--debug" }
     
-    $pythonCmd = if ($script:PythonCmd) { $script:PythonCmd } else { "python" }
-    & $pythonCmd $SetupScript @args
+    & python $SetupScript @setupArgs
     
-    return $LASTEXITCODE -eq 0
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Setup completed successfully!"
+        return $true
+    } else {
+        Write-Error "Setup failed with exit code $LASTEXITCODE"
+        return $false
+    }
 }
 
 function Start-Standalone {
     Write-Info "Starting standalone web manager..."
     
-    # Check if launch.py exists
-    $launchScript = Join-Path $WebManagerDir "launch.py"
-    if (-not (Test-Path $launchScript)) {
-        Write-Error "Launch script not found. Run setup first: .\manage.ps1 setup"
+    $LaunchScript = Join-Path $WebManagerDir "launch.py"
+    if (-not (Test-Path $LaunchScript)) {
+        Write-Error "Launch script not found: $LaunchScript"
         return $false
     }
     
-    Push-Location $WebManagerDir
-    try {
-        $env:DEBUG = $Debug.ToString().ToLower()
-        
-        $args = @()
-        if ($Debug) { $args += "--debug" }
-        $args += "--host", $HostAddress
-        $args += "--port", $Port
-        
-        Write-Success "Starting web manager..."
-        Write-Host "  Mode: $(if ($Debug) { 'Development' } else { 'Production' })" -ForegroundColor Gray
-        Write-Host "  URL: http://${Host}:${Port}" -ForegroundColor Gray
-        Write-Host ""
-        Write-Warning "Press Ctrl+C to stop the server"
-        Write-Host ""
-        
-        $pythonCmd = if ($script:PythonCmd) { $script:PythonCmd } else { "python" }
-        & $pythonCmd launch.py @args
-        
-        return $true
-    } finally {
-        Pop-Location
+    $launchArgs = @("--port", $Port, "--host", $HostAddress)
+    if ($DebugMode) {
+        $launchArgs += "--debug"
     }
+    
+    Write-Info "Starting on http://$HostAddress`:$Port"
+    & python $LaunchScript @launchArgs
 }
 
 function Start-Docker {
     Write-Info "Starting Docker web manager..."
     
-    # Check if Docker is available
-    try {
-        $dockerVersion = docker --version 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "Docker not found. Please install Docker Desktop"
-            return $false
-        }
-        Write-Success "Docker available: $dockerVersion"
-    } catch {
-        Write-Error "Docker not found. Please install Docker Desktop"
+    $ComposeFile = Join-Path $ProjectRoot "compose" "docker-compose-manager.yml"
+    if (-not (Test-Path $ComposeFile)) {
+        Write-Error "Docker Compose file not found: $ComposeFile"
         return $false
     }
     
-    $composeFile = Join-Path $ProjectRoot "compose\docker-compose-manager.yml"
-    if (-not (Test-Path $composeFile)) {
-        Write-Error "Docker compose file not found: $composeFile"
-        return $false
+    $env:WEB_MANAGER_PORT = $Port
+    if ($DebugMode) {
+        $env:DEBUG_MODE = "true"
     }
     
-    Push-Location (Join-Path $ProjectRoot "compose")
-    try {
-        Write-Info "Starting Docker services..."
-        docker-compose -f docker-compose-manager.yml up -d web-manager
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Success "Docker services started"
-            Write-Host ""
-            Write-Info "Web manager available at: http://localhost:5000"
-            Write-Info "View logs: .\manage.ps1 logs"
-            Write-Info "Stop services: .\manage.ps1 stop"
-            return $true
-        } else {
-            Write-Error "Failed to start Docker services"
-            return $false
-        }
-    } finally {
-        Pop-Location
+    Write-Info "Starting Docker containers..."
+    & docker-compose -f $ComposeFile up -d
+    
+    if ($LASTEXITCODE -eq 0) {
+        Write-Success "Docker containers started successfully!"
+        Write-Info "Web manager available at http://localhost:$Port"
+    } else {
+        Write-Error "Failed to start Docker containers"
     }
 }
 
 function Stop-Services {
     Write-Info "Stopping services..."
     
-    # Try to stop Docker services
-    try {
-        $dockerVersion = docker --version 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Push-Location (Join-Path $ProjectRoot "compose")
-            try {
-                docker-compose -f docker-compose-manager.yml down
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Success "Docker services stopped"
-                } else {
-                    Write-Warning "Some issues stopping Docker services"
-                }
-            } finally {
-                Pop-Location
-            }
-        }
-    } catch {
-        Write-Warning "Docker not available"
+    # Stop Docker containers
+    $ComposeFile = Join-Path $ProjectRoot "compose" "docker-compose-manager.yml"
+    if (Test-Path $ComposeFile) {
+        & docker-compose -f $ComposeFile down
     }
     
-    # Try to stop standalone processes
-    $pythonProcesses = Get-Process python -ErrorAction SilentlyContinue | Where-Object {
-        $_.ProcessName -eq "python" -and $_.CommandLine -like "*launch.py*"
-    }
-    
-    if ($pythonProcesses) {
-        Write-Info "Stopping standalone processes..."
-        $pythonProcesses | Stop-Process -Force
-        Write-Success "Standalone processes stopped"
-    }
+    Write-Success "Services stopped"
 }
 
 function Show-Status {
-    Write-Info "Checking service status..."
+    Write-Info "Service Status:"
     
-    # Check Docker services
-    try {
-        $dockerVersion = docker --version 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host ""
-            Write-Host "=== Docker Services ===" -ForegroundColor Yellow
-            Push-Location (Join-Path $ProjectRoot "compose")
-            try {
-                docker-compose -f docker-compose-manager.yml ps
-            } finally {
-                Pop-Location
-            }
-        }
-    } catch {
-        Write-Warning "Docker not available"
-    }
-    
-    # Check standalone processes
-    $pythonProcesses = Get-Process python -ErrorAction SilentlyContinue | Where-Object {
-        $_.ProcessName -eq "python"
-    }
-    
-    if ($pythonProcesses) {
-        Write-Host ""
-        Write-Host "=== Python Processes ===" -ForegroundColor Yellow
-        $pythonProcesses | Format-Table Id, ProcessName, CPU, WorkingSet -AutoSize
+    # Check Docker containers
+    $ComposeFile = Join-Path $ProjectRoot "compose" "docker-compose-manager.yml"
+    if (Test-Path $ComposeFile) {
+        & docker-compose -f $ComposeFile ps
     }
 }
 
 function Show-Logs {
-    Write-Info "Showing logs..."
+    Write-Info "Service Logs:"
     
-    try {
-        $dockerVersion = docker --version 2>$null
-        if ($LASTEXITCODE -eq 0) {
-            Push-Location (Join-Path $ProjectRoot "compose")
-            try {
-                docker-compose -f docker-compose-manager.yml logs -f web-manager
-            } finally {
-                Pop-Location
-            }
-        } else {
-            Write-Warning "Docker not available - no centralized logs for standalone mode"
-        }
-    } catch {
-        Write-Warning "Docker not available - no centralized logs for standalone mode"
+    # Show Docker logs
+    $ComposeFile = Join-Path $ProjectRoot "compose" "docker-compose-manager.yml"
+    if (Test-Path $ComposeFile) {
+        & docker-compose -f $ComposeFile logs --tail=50 -f
     }
 }
 
 # Main execution
 Show-Header
-
-# Set default Python command
-$script:PythonCmd = "python"
 
 # Test Python availability
 if (-not (Test-Python)) {
@@ -286,23 +217,16 @@ if (-not (Test-Python)) {
 
 # Execute action
 switch ($Action.ToLower()) {
-    "help" { 
-        Show-Help 
-    }
     "setup" {
-        $success = Run-Setup
-        if (-not $success) { 
-            Write-Error "Setup failed"
-            exit 1 
+        if (-not (Invoke-Setup)) {
+            exit 1
         }
     }
     "standalone" {
-        $success = Start-Standalone
-        if (-not $success) { exit 1 }
+        Start-Standalone
     }
     "docker" {
-        $success = Start-Docker
-        if (-not $success) { exit 1 }
+        Start-Docker
     }
     "stop" {
         Stop-Services
@@ -313,12 +237,14 @@ switch ($Action.ToLower()) {
     "logs" {
         Show-Logs
     }
+    "help" {
+        Show-Help
+    }
     default {
-        Write-Error "Unknown action: $Action"
+        Write-Warning "Unknown action: $Action"
         Show-Help
         exit 1
     }
 }
 
-Write-Host ""
 Write-Success "Operation completed successfully!"

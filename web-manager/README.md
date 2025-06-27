@@ -21,6 +21,7 @@ Run the web manager directly on your host system without Docker.
 #### Quick Start
 
 **Windows:**
+
 ```cmd
 cd web-manager
 nexus-manager.bat --install  # Install dependencies
@@ -28,6 +29,7 @@ nexus-manager.bat            # Start the application
 ```
 
 **Linux/macOS:**
+
 ```bash
 cd web-manager
 ./nexus-manager.sh --install  # Install dependencies
@@ -35,6 +37,7 @@ cd web-manager
 ```
 
 **Python Direct:**
+
 ```bash
 cd web-manager
 python launch.py --install   # Install dependencies
@@ -42,6 +45,7 @@ python launch.py             # Start the application
 ```
 
 #### Standalone Features
+
 - ✅ Native Nexus CLI management (if Nexus CLI is installed)
 - ✅ Docker container management (if Docker is available)
 - ✅ System metrics monitoring
@@ -61,6 +65,7 @@ docker-compose -f compose/docker-compose-manager.yml up -d web-manager
 ```
 
 #### Docker Features
+
 - ✅ Full Docker container management
 - ✅ Docker Compose orchestration
 - ✅ Network isolation
@@ -82,16 +87,19 @@ nexus-manager.bat --debug   # Windows
 ## System Requirements
 
 ### Minimum Requirements
+
 - Python 3.8 or later
 - 2GB RAM
 - 1GB disk space
 
 ### Optional Components
+
 - **Nexus CLI**: For native host deployments
 - **Docker**: For container deployments
 - **Docker Compose**: For orchestrated deployments
 
 ### Supported Platforms
+
 - Windows 10/11
 - Linux (Ubuntu, CentOS, RHEL, etc.)
 - macOS 10.15+
@@ -99,6 +107,7 @@ nexus-manager.bat --debug   # Windows
 ## Installation
 
 ### 1. Clone the Repository
+
 ```bash
 git clone <repository-url>
 cd nexus-docker
@@ -107,6 +116,7 @@ cd nexus-docker
 ### 2. Choose Your Installation Method
 
 #### Option A: Standalone Installation
+
 ```bash
 cd web-manager
 # Windows
@@ -117,6 +127,7 @@ nexus-manager.bat --install
 ```
 
 #### Option B: Docker Installation
+
 ```bash
 # Build the Docker images
 docker-compose -f compose/docker-compose-manager.yml build
@@ -128,6 +139,7 @@ docker-compose -f compose/docker-compose-manager.yml up -d
 ### 3. Access the Web Interface
 
 Open your browser and navigate to:
+
 - **Standalone**: http://localhost:5000
 - **Docker**: http://localhost:5000 (or the port specified in your compose file)
 
@@ -185,6 +197,7 @@ environment:
 ### Monitoring
 
 The dashboard provides real-time monitoring of:
+
 - System CPU and memory usage
 - Instance status and resource consumption
 - Network and disk I/O metrics
@@ -217,6 +230,7 @@ The application provides a REST API for automation and integration:
 ### Common Issues
 
 1. **Port Already in Use**
+
    ```bash
    # Change the port
    python launch.py --port 8080
@@ -233,6 +247,7 @@ The application provides a REST API for automation and integration:
    - Use Docker deployments as alternative
 
 4. **Permission Errors (Linux/macOS)**
+
    ```bash
    # Make scripts executable
    chmod +x nexus-manager.sh
@@ -242,11 +257,13 @@ The application provides a REST API for automation and integration:
 ### Logs and Debugging
 
 **Standalone Mode:**
+
 ```bash
 python launch.py --debug  # Enable debug mode
 ```
 
 **Docker Mode:**
+
 ```bash
 docker-compose -f compose/docker-compose-manager.yml logs -f web-manager
 ```
@@ -304,6 +321,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Support
 
 For support and questions:
+
 1. Check the troubleshooting section
 2. Review the logs for error messages
 3. Open an issue on GitHub
