@@ -685,7 +685,15 @@ class NexusManager:
             return self.create_single_node_container(node_id, **kwargs)
         elif mode == 'docker-multi':
             node_ids = kwargs.get('node_ids', [node_id])
-            return self.create_multi_node_container(node_ids, **kwargs)
+            # Map parameter names for multi-node container
+            multi_kwargs = {}
+            if 'threads' in kwargs:
+                multi_kwargs['total_threads'] = kwargs['threads']
+            if 'memory_limit' in kwargs:
+                multi_kwargs['memory_limit'] = kwargs['memory_limit']
+            if 'cpu_limit' in kwargs:
+                multi_kwargs['cpu_limit'] = kwargs['cpu_limit']
+            return self.create_multi_node_container(node_ids, **multi_kwargs)
         else:
             return {"success": False, "error": f"Unsupported mode: {mode}"}
     
@@ -879,6 +887,11 @@ def settings_page():
     """Settings page"""
     return render_template('settings.html')
 
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon"""
+    return '', 204  # No content
+
 @app.errorhandler(404)
 def not_found(error):
     return render_template('error.html', error='Page not found'), 404
@@ -1056,18 +1069,33 @@ def api_restart_instance(instance_id):
 @app.route('/api/instances', methods=['POST'])
 def api_create_instance():
     """Create a new instance"""
-    data = request.get_json()
-    mode = data.get('mode')
-    node_id = data.get('node_id')
-    
-    if not mode or not node_id:
-        return jsonify({"success": False, "error": "Mode and node_id are required"}), 400
-    
-    # Extract additional parameters
-    kwargs = {k: v for k, v in data.items() if k not in ['mode', 'node_id']}
-    
-    result = nexus_manager.start_instance(mode, node_id, **kwargs)
-    return jsonify(result)
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No JSON data provided"}), 400
+            
+        mode = data.get('mode')
+        node_id = data.get('node_id')
+        
+        if not mode or not node_id:
+            return jsonify({"success": False, "error": "Mode and node_id are required"}), 400
+        
+        # Extract additional parameters
+        kwargs = {k: v for k, v in data.items() if k not in ['mode', 'node_id']}
+        
+        result = nexus_manager.start_instance(mode, node_id, **kwargs)
+        
+        if result.get('success'):
+            # Emit socket event for real-time updates
+            socketio.emit('instance_created', result)
+            return jsonify(result), 201
+        else:
+            return jsonify(result), 400
+            
+    except Exception as e:
+        app.logger.error(f"Error creating instance: {str(e)}")
+        error_response = {"success": False, "error": f"Failed to deploy instance: {str(e)}"}
+        return jsonify(error_response), 500
 
 @app.route('/api/system-metrics')
 def api_system_metrics():
