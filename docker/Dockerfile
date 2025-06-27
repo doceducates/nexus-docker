@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for Nexus CLI
-FROM debian:12-slim AS downloader
+FROM debian:stable-slim AS downloader
 
 # Install dependencies for downloading
 RUN apt-get update && apt-get install -y \
@@ -40,7 +40,7 @@ RUN echo '#!/bin/bash' > download_nexus.sh && \
 ####################################################################################################
 ## Runtime Image
 ####################################################################################################
-FROM debian:12-slim
+FROM debian:stable-slim
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
